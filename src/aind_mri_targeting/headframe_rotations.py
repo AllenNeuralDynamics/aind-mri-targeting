@@ -48,15 +48,69 @@ def headframe_centers_of_mass(
     force=False,
 ):
     """
-    Find the centers of mass of headframes in a segmentation
+    Compute the centers of mass for headframe segments in MRI images and save them to files.
 
-    Args:
-        mri_path (str): Path to the MRI image
-        segmentation_path (str): Path to the segmentation image
-        output_path (optional, str): Path to save the output file
+    Parameters
+    ----------
+    mri_path : str
+        The file path to the MRI image.
+    segmentation_path : str
+        The file path to the segmentation image.
+    output_path : str or None, optional
+        The directory where the output files will be saved. If None, the current working directory is used.
+        The default is None.
+    segment_format : str or None, optional
+        The format string for segment names. The default is None, in which case "{}_{}" will be used.
+        the string will be formatted with `segment_format.format(ap, orient)`.
+    mouse_id : str or None, optional
+        The ID of the mouse. If None, the output file names will not include a mouse ID.
+        The default is None.
+    ap_names : tuple of str, optional
+        The names of the anterior-posterior axis segments. The default is ("anterior", "posterior").
+    orient_names : tuple of str, optional
+        The names of the orientation segments. The default is ("horizontal", "vertical").
+    force : bool, optional
+        If True, overwrite existing files in the output directory. If False, raise an error if a file already exists.
+        The default is False.
 
-    Returns:
-        list: List of centers of mass
+    Returns
+    -------
+    None
+        This function does not return any value.
+
+    Creates
+    -------
+    Center of mass fcsv files
+        The function saves files with the computed centers of mass for each segment in the specified output directory.
+
+    Raises
+    ------
+    NotADirectoryError
+        If the output path is not a directory.
+    FileExistsError
+        If a file already exists and `force` is set to False.
+    ValueError
+        If no segments are found based on the provided key format.
+
+    Notes
+    -----
+    - The function computes the centers of mass for specified segments in MRI and segmentation images.
+    - The output file names can include the mouse ID and follow a specified format.
+    - Existing files in the output directory will be skipped unless `force` is set to True.
+
+    Examples
+    --------
+    Compute centers of mass and save to the current working directory:
+
+    >>> headframe_centers_of_mass("mri.nii", "segmentation.nii")
+
+    Compute centers of mass and save to a specified directory:
+
+    >>> headframe_centers_of_mass("mri.nii", "segmentation.nii", output_path="/path/to/output")
+
+    Force overwrite existing files in the specified directory:
+
+    >>> headframe_centers_of_mass("mri.nii", "segmentation.nii", output_path="/path/to/output", force=True)
     """
 
     if output_path is None:
