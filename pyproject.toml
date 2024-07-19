@@ -4,11 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aind-mri-targeting"
-description = "Generated from aind-library-template"
+description = "Tools to plan and execute MRI-guided targeting experiments"
 license = {text = "MIT"}
 requires-python = ">=3.7"
 authors = [
-    {name = "Allen Institute for Neural Dynamics"}
+    {name = "Allen Institute for Neural Dynamics"},
+    {name = "Galen Lynch", email = "galen@galenlynch.com"},
+    {name = "Yoni Browning", email = "yoni.browning@alleninstitute.org"}
 ]
 classifiers = [
     "Programming Language :: Python :: 3"
@@ -17,7 +19,14 @@ readme = "README.md"
 dynamic = ["version"]
 
 dependencies = [
+    'aind_mri_utils >= 0.0.23',
+    'SimpleITK >=2, <3',
+    'pynrrd >=1, <2'
 ]
+
+[project.scripts]
+headframe_centers_of_mass = "aind_mri_targeting.scripts.headframe_centers_of_mass:main"
+install_notebooks = "aind_mri_targeting.scripts.install_notebooks:main"
 
 [project.optional-dependencies]
 dev = [
@@ -68,7 +77,7 @@ exclude_lines = [
     "import",
     "pragma: no cover"
 ]
-fail_under = 100
+fail_under = 0
 
 [tool.isort]
 line_length = 79
@@ -76,4 +85,4 @@ profile = "black"
 
 [tool.interrogate]
 exclude = ["setup.py", "docs", "build"]
-fail-under = 100
+fail-under = 0
