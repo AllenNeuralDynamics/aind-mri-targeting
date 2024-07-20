@@ -67,3 +67,22 @@ def install_notebooks(output=None, force=False):
         print(f"Copying {filename}")
         shutil.copy2(str(file), str(output_dir))
     return
+
+
+def check_output_path(output_path=None):
+    if output_path is None:
+        output_path = os.getcwd()
+    if not os.path.isdir(output_path):
+        raise NotADirectoryError(
+            f"Output path {output_path} is not a directory"
+        )
+    return Path(output_path)
+
+
+def err_if_files_exist(
+    files, error_message="File {} already exists. Set force=True to overwrite."
+):
+    for file in files:
+        if os.path.exists(file):
+            raise FileExistsError(error_message.format(file))
+    return

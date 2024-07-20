@@ -16,7 +16,7 @@ pip install -e .
 
 To install notebooks, run
 ```bash
-mritargeting install notebooks [path]
+install_notebooks [path]
 ```
 
 To develop the code, run
