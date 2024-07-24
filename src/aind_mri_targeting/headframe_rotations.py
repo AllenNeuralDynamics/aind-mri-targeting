@@ -3,29 +3,20 @@ Routines for finding the centers of mass and rotations of headframes
 """
 
 import os
-from pathlib import Path
 
-import SimpleITK as sitk
 import nrrd
+import SimpleITK as sitk
 from aind_mri_utils import headframe_rotation as hr
+from aind_mri_utils import rotations as mrrot
 from aind_mri_utils.file_io import slicer_files as sf
+
+from . import util as mrt_ut
 
 
 def try_open_sitk(path):
     if not os.path.exists(path):
         raise FileNotFoundError(f"File {path} not found")
     return sitk.ReadImage(path)
-
-
-def make_segment_dict(segment_info, segment_format, ap_names, orient_names):
-    seg_vals = dict()
-    for orient in orient_names:
-        seg_vals[orient] = dict()
-        for ap in ap_names:
-            key_name = segment_format.format(ap, orient)
-            if key_name in segment_info:
-                seg_vals[orient][ap] = segment_info[key_name]
-    return seg_vals
 
 
 def create_savenames(savepath, save_format, orient_names, ap_names):
@@ -48,7 +39,8 @@ def headframe_centers_of_mass(
     force=False,
 ):
     """
-    Compute the centers of mass for headframe segments in MRI images and save them to files.
+    Compute the centers of mass for headframe segments in MRI images and save
+    them to files.
 
     Parameters
     ----------
@@ -57,21 +49,24 @@ def headframe_centers_of_mass(
     segmentation_path : str
         The file path to the segmentation image.
     output_path : str or None, optional
-        The directory where the output files will be saved. If None, the current working directory is used.
-        The default is None.
+        The directory where the output files will be saved. If None, the
+        current working directory is used.  The default is None.
     segment_format : str or None, optional
-        The format string for segment names. The default is None, in which case "{}_{}" will be used.
-        the string will be formatted with `segment_format.format(ap, orient)`.
+        The format string for segment names. The default is None, in which case
+        "{}_{}" will be used.  the string will be formatted with
+        `segment_format.format(ap, orient)`.
     mouse_id : str or None, optional
-        The ID of the mouse. If None, the output file names will not include a mouse ID.
-        The default is None.
+        The ID of the mouse. If None, the output file names will not include a
+        mouse ID.  The default is None.
     ap_names : tuple of str, optional
-        The names of the anterior-posterior axis segments. The default is ("anterior", "posterior").
+        The names of the anterior-posterior axis segments. The default is
+        ("anterior", "posterior").
     orient_names : tuple of str, optional
-        The names of the orientation segments. The default is ("horizontal", "vertical").
+        The names of the orientation segments. The default is ("horizontal",
+        "vertical").
     force : bool, optional
-        If True, overwrite existing files in the output directory. If False, raise an error if a file already exists.
-        The default is False.
+        If True, overwrite existing files in the output directory. If False,
+        raise an error if a file already exists.  The default is False.
 
     Returns
     -------
@@ -81,7 +76,8 @@ def headframe_centers_of_mass(
     Creates
     -------
     Center of mass fcsv files
-        The function saves files with the computed centers of mass for each segment in the specified output directory.
+        The function saves files with the computed centers of mass for each
+        segment in the specified output directory.
 
     Raises
     ------
@@ -94,9 +90,12 @@ def headframe_centers_of_mass(
 
     Notes
     -----
-    - The function computes the centers of mass for specified segments in MRI and segmentation images.
-    - The output file names can include the mouse ID and follow a specified format.
-    - Existing files in the output directory will be skipped unless `force` is set to True.
+    - The function computes the centers of mass for specified segments in MRI
+    and segmentation images.
+    - The output file names can include the mouse ID and follow a specified
+    format.
+    - Existing files in the output directory will be skipped unless `force` is
+    set to True.
 
     Examples
     --------
@@ -106,51 +105,36 @@ def headframe_centers_of_mass(
 
     Compute centers of mass and save to a specified directory:
 
-    >>> headframe_centers_of_mass("mri.nii", "segmentation.nii", output_path="/path/to/output")
+    >>> headframe_centers_of_mass("mri.nii", "segmentation.nii",
+    output_path="/path/to/output")
 
     Force overwrite existing files in the specified directory:
 
-    >>> headframe_centers_of_mass("mri.nii", "segmentation.nii", output_path="/path/to/output", force=True)
+    >>> headframe_centers_of_mass("mri.nii", "segmentation.nii",
+    output_path="/path/to/output", force=True)
     """
-
-    if output_path is None:
-        output_path = os.getcwd()
-    if not os.path.isdir(output_path):
-        raise NotADirectoryError(
-            f"Output path {output_path} is not a directory"
-        )
-    savepath = Path(output_path)
+    savepath = mrt_ut.check_output_path(output_path)
 
     if mouse_id is None:
         savename_format = "{}_{}_coms.fcsv"
     else:
         savename_format = f"{mouse_id}_{{}}_{{}}_coms.fcsv"
 
-    if segment_format is None:
-        segment_format = "{}_{}"
-
     save_names = create_savenames(
         savepath, savename_format, orient_names, ap_names
     )
     if not force:
-        for orient in orient_names:
-            for ap in ap_names:
-                file = save_names[orient][ap]
-                if os.path.exists(file):
-                    raise FileExistsError(f"File {file} already exists")
+        filenames = [
+            f for orient in orient_names for f in save_names[orient].values()
+        ]
+        mrt_ut.err_if_file_exists(filenames)
 
     img = try_open_sitk(mri_path)
     seg_img = try_open_sitk(segmentation_path)
     _, seg_odict = nrrd.read(segmentation_path)
-    segment_info = sf.find_seg_nrrd_header_segment_info(seg_odict)
-
-    seg_vals = make_segment_dict(
-        segment_info, segment_format, ap_names, orient_names
+    seg_vals = hr.segment_dict_from_seg_odict(
+        seg_odict, segment_format, ap_names, orient_names
     )
-    if all([len(d) == 0 for d in seg_vals.values()]):
-        raise ValueError(
-            "No segments found. Is the key format {key_format} correct?"
-        )
 
     coms_dict = hr.estimate_coms_from_image_and_segmentation(
         img, seg_img, seg_vals
@@ -163,4 +147,109 @@ def headframe_centers_of_mass(
                 save_filename = savepath / savename_format.format(ap, orient)
                 ptdict = {i: coms[i, :] for i in range(coms.shape[0])}
                 sf.create_slicer_fcsv(save_filename, ptdict)
+    return
+
+
+def theta_to_sitk_affine(theta, inverse=False):
+    """
+    Convert a set of theta parameters to a SimpleITK affine transformation.
+
+    Parameters
+    ----------
+    theta : list
+        A list of theta parameters representing rotation angles and translation
+        values.
+    inverse : bool, optional
+        Flag indicating whether to compute the inverse transformation. Default
+        is False.
+
+    Returns
+    -------
+    sitk.AffineTransform
+        The SimpleITK affine transformation.
+
+    """
+    rotmat = mrrot.combine_angles(*theta[:3])
+    translation = theta[3:]
+    affine = sitk.AffineTransform(3)
+    affine.SetMatrix(rotmat.flatten())
+    affine.SetTranslation(translation.tolist())
+    if inverse:
+        affine = affine.GetInverse()
+    return affine
+
+
+def calculate_headframe_transforms(
+    img_path,
+    seg_path,
+    lower_plane_path,
+    output_path=None,
+    mouse_name=None,
+    volume_transforms=True,
+    segment_format="{}_{}",
+    force=False,
+):
+    """
+    Calculate rotations from segmentation.
+
+    This function calculates rotations from a given segmentation and lower
+    plane information.  It saves the calculated rotations as transforms in the
+    specified output path.
+
+    Parameters
+    ----------
+    img_path : str
+        Path to the image file.
+    seg_path : str
+        Path to the segmentation file.
+    lower_plane_path : str
+        Path to the lower plane file.
+    output_path : str
+        Path to save the calculated rotations.
+    mouse_name : str, optional
+        Name of the mouse. Defaults to None.
+    volume_transforms : bool, optional
+        Whether to write the inverse of the calculated rotations. If you are
+        transforming a volume with SITK, you need to use the inverse. Defaults
+        to True.
+    segment_format : str, optional
+        Format for segment names. Defaults to "{}_{}".
+    force : bool, optional
+        Whether to overwrite existing output files. Defaults to False.
+
+    Returns
+    -------
+    None
+        This function does not return anything.
+
+    """
+    savepath = mrt_ut.check_output_path(output_path)
+    output_fnames = [
+        "hf_hole_angles.h5",
+        "com.h5",
+        "com_plane.h5",
+    ]
+    if mouse_name is not None:
+        output_fnames = [f"{mouse_name}_{f}" for f in output_fnames]
+    save_paths = [savepath / fname for fname in output_fnames]
+    print(save_paths)
+    if not force:
+        mrt_ut.err_if_files_exist(save_paths)
+    img = try_open_sitk(img_path)
+    seg_img = try_open_sitk(seg_path)
+    if not os.path.exists(lower_plane_path):
+        raise FileNotFoundError(f"File {lower_plane_path} not found")
+    plane_pts = sf.markup_json_to_numpy(lower_plane_path)[0]
+    _, seg_odict = nrrd.read(seg_path)
+    theta_angle, theta_coms, theta_coms_plane = (
+        hr.find_hf_rotation_from_seg_and_lowerplane(
+            img, seg_img, seg_odict, plane_pts, segment_format
+        )
+    )
+    for fname, theta in zip(
+        save_paths, [theta_angle, theta_coms, theta_coms_plane]
+    ):
+        print(fname)
+        affine = theta_to_sitk_affine(theta, inverse=volume_transforms)
+        sitk.WriteTransform(affine, str(fname))
     return

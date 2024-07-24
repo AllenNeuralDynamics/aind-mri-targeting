@@ -3,4 +3,5 @@ exclude =
     .git,
     __pycache__,
     build
+    .ipynb_checkpoints
 max-complexity = 10

@@ -5,45 +5,37 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "aind-mri-targeting"
 description = "Tools to plan and execute MRI-guided targeting experiments"
-license = {text = "MIT"}
+license = { text = "MIT" }
 requires-python = ">=3.7"
 authors = [
-    {name = "Allen Institute for Neural Dynamics"},
-    {name = "Galen Lynch", email = "galen@galenlynch.com"},
-    {name = "Yoni Browning", email = "yoni.browning@alleninstitute.org"}
+    { name = "Allen Institute for Neural Dynamics" },
+    { name = "Galen Lynch", email = "galen@galenlynch.com" },
+    { name = "Yoni Browning", email = "yoni.browning@alleninstitute.org" },
 ]
-classifiers = [
-    "Programming Language :: Python :: 3"
-]
+classifiers = ["Programming Language :: Python :: 3"]
 readme = "README.md"
 dynamic = ["version"]
 
 dependencies = [
-    'aind_mri_utils >= 0.0.23',
+    'aind_mri_utils >= 0.0.31',
     'SimpleITK >=2, <3',
-    'pynrrd >=1, <2'
+    'pynrrd >=1, <2',
+    'numpy >=1.20, <2',
 ]
 
 [project.scripts]
 headframe_centers_of_mass = "aind_mri_targeting.scripts.headframe_centers_of_mass:main"
 install_notebooks = "aind_mri_targeting.scripts.install_notebooks:main"
+calculate_headframe_transforms = "aind_mri_targeting.scripts.calculate_headframe_transforms:main"
 
 [project.optional-dependencies]
-dev = [
-    'black',
-    'coverage',
-    'flake8',
-    'interrogate',
-    'isort',
-    'Sphinx',
-    'furo'
-]
+dev = ['black', 'coverage', 'flake8', 'interrogate', 'isort', 'Sphinx', 'furo']
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.dynamic]
-version = {attr = "aind_mri_targeting.__version__"}
+version = { attr = "aind_mri_targeting.__version__" }
 
 [tool.black]
 line-length = 79
@@ -75,7 +67,7 @@ exclude_lines = [
     "if __name__ == .__main__.:",
     "from",
     "import",
-    "pragma: no cover"
+    "pragma: no cover",
 ]
 fail_under = 0
 
