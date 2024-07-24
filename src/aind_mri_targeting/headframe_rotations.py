@@ -4,11 +4,11 @@ Routines for finding the centers of mass and rotations of headframes
 
 import os
 
-import SimpleITK as sitk
 import nrrd
+import SimpleITK as sitk
 from aind_mri_utils import headframe_rotation as hr
-from aind_mri_utils.file_io import slicer_files as sf
 from aind_mri_utils import rotations as mrrot
+from aind_mri_utils.file_io import slicer_files as sf
 
 from . import util as mrt_ut
 

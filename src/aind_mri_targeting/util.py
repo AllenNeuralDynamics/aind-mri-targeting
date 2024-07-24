@@ -2,10 +2,10 @@
 utilities
 """
 
+import glob
 import os
 import shutil
 from pathlib import Path
-import glob
 
 
 def install_notebooks(output=None, force=False):

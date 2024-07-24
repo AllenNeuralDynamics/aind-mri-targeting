@@ -3,6 +3,7 @@ Command line script to calculate the center of mass of headframe segments
 """
 
 import argparse
+
 from .. import headframe_rotations as hr
 
 

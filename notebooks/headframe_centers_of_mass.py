@@ -1,6 +1,7 @@
 # %%
-from aind_mri_targeting.headframe_rotations import headframes_centers_of_mass
 from pathlib import Path
+
+from aind_mri_targeting.headframe_rotations import headframes_centers_of_mass
 
 # %%
 # Input files
@@ -18,7 +19,8 @@ mouse_id = None
 force = False
 
 # Default key format is "{}_{}" for orientation and AP direction.
-# Must match the segments in the segmentation file. If not, specify the key format.
+# Must match the segments in the segmentation file. If not, specify the key
+# format.
 segment_format = None
 # %%
 headframes_centers_of_mass(
