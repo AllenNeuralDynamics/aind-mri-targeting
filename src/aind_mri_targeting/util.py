@@ -70,6 +70,26 @@ def install_notebooks(output=None, force=False):
 
 
 def check_output_path(output_path=None):
+    """
+    Check if the provided output path is a valid directory.
+
+    If no output path is provided, the current working directory is used.
+
+    Parameters
+    ----------
+    output_path : str, optional
+        The path to the output directory. Defaults to None.
+
+    Returns
+    -------
+    pathlib.Path
+        The output path as a `Path` object.
+
+    Raises
+    ------
+    NotADirectoryError
+        If the output path is not a directory.
+    """
     if output_path is None:
         output_path = os.getcwd()
     if not os.path.isdir(output_path):
@@ -82,6 +102,35 @@ def check_output_path(output_path=None):
 def err_if_files_exist(
     files, error_message="File {} already exists. Set force=True to overwrite."
 ):
+    """
+    Check if the given files already exist and raise a FileExistsError if any
+    of them do.
+
+    Parameters
+    ----------
+    files : list
+        A list of file paths to check for existence.
+    error_message : str, optional
+        The error message to raise if a file exists. Defaults to "File {}
+        already exists. Set force=True to overwrite."
+
+    Raises
+    ------
+    FileExistsError
+        If any of the files already exist.
+
+    Returns
+    -------
+    None
+
+    Examples
+    --------
+    >>> err_if_files_exist(["file1.txt", "file2.txt"])
+    Traceback (most recent call last):
+        ...
+    FileExistsError: File file1.txt already exists. Set force=True to
+    overwrite.
+    """
     for file in files:
         if os.path.exists(file):
             raise FileExistsError(error_message.format(file))
