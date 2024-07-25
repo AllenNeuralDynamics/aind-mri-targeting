@@ -232,7 +232,6 @@ def calculate_headframe_transforms(
     if mouse_name is not None:
         output_fnames = [f"{mouse_name}_{f}" for f in output_fnames]
     save_paths = [savepath / fname for fname in output_fnames]
-    print(save_paths)
     if not force:
         mrt_ut.err_if_files_exist(save_paths)
     img = try_open_sitk(img_path)
@@ -249,7 +248,6 @@ def calculate_headframe_transforms(
     for fname, theta in zip(
         save_paths, [theta_angle, theta_coms, theta_coms_plane]
     ):
-        print(fname)
         affine = theta_to_sitk_affine(theta, inverse=volume_transforms)
         sitk.WriteTransform(affine, str(fname))
     return
