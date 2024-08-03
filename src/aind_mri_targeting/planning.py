@@ -386,16 +386,16 @@ def plan_insertion(
 
     # %%
     insert_list = [68, 59, 67]
-    compatible_insertions = set(np.nonzero(valid[insert_list[0], :])[0])
+    works_for_all = set(np.nonzero(valid[insert_list[0], :])[0])
 
     for ii in range(0, len(insert_list)):
-        compatible_insertions = (
-            compatible_insertions
+        works_for_all = (
+            works_for_all
             & set(np.nonzero(valid[insert_list[ii], :])[0])
             & set(np.nonzero(df.target == "GenFacCran")[0])
         )
 
-    df.iloc[np.concatenate([insert_list, list(compatible_insertions)])]
+    df.iloc[np.concatenate([insert_list, list(works_for_all)])]
 
     # %%
     headframe_mesh = trimesh.Trimesh()
