@@ -1,3 +1,4 @@
+# %%
 from aind_mri_targeting.planning import (
     candidate_insertions,
     valid_insertion_pairs,
@@ -8,10 +9,31 @@ from aind_mri_targeting.planning import (
     test_for_collisions,
     plan_insertion,
 )
+from aind_mri_utils.file_io import slicer_files as sf
 
 from pathlib import Path
 import trimesh
+import SimpleITK as sitk
+from aind_mri_utils import rotations as rot
+from aind_mri_utils.file_io import slicer_files as sf
+from aind_mri_utils.file_io import simpleitk as mr_sitk
+from aind_mri_utils.file_io.obj_files import get_vertices_and_faces
+from aind_mri_utils import coordinate_systems as cs
+from aind_mri_utils.optimization import (
+    get_headframe_hole_lines,
+    append_ones_column,
+)
+from aind_mri_utils.meshes import load_newscale_trimesh
+from aind_mri_utils.chemical_shift import (
+    compute_chemical_shift,
+    chemical_shift_transform,
+)
+from aind_mri_utils.arc_angles import arc_angles_to_hit_two_points
 
+import numpy as np
+
+
+# %%
 mouse = "743700"
 whoami = "galen"
 if whoami == "galen":
@@ -29,7 +51,7 @@ headframe_model_dir = base_dir / "ephys/persist/data/MRI/HeadframeModels/"
 probe_model_file = (
     headframe_model_dir / "dovetailtweezer_oneShank_centered_corrected.obj"
 )  # "modified_probe_holder.obj"
-annotations_path = base_dir / "ephys/persist/data/MRI/processed/{}/UW2".format(
+annotations_path = base_dir / "ephys/persist/data/MRI/processed/{}/".format(
     mouse
 )
 
@@ -71,7 +93,9 @@ calibration_dir = (
     base_dir / "ephys/persist/data/probe_calibrations/CSVCalibrations/"
 )
 calibration_file = calibration_dir / calibration_filename
-measured_hole_centers = annotations_path / "measured_hole_centers.xlsx"
+measured_hole_centers = (
+    annotations_path / "measured_hole_centers_conflict.xlsx"
+)
 
 
 # manual_hole_centers_file = annotations_path / 'hole_centers.mrk.json'
@@ -83,3 +107,68 @@ test_probe_translation_save_path = str(
     base_save_dir / "test_probe_translation.h5"
 )
 transform_filename = str(annotations_path / (mouse + "_com_plane.h5"))
+
+# %%
+target_structures = ["CCant", "CCpst", "AntComMid", "GenFacCran2"]
+
+# %%
+image = sitk.ReadImage(image_path)
+# Read points
+manual_annotation = sf.read_slicer_fcsv(manual_annotation_path)
+
+# Load the headframe
+headframe, headframe_faces = get_vertices_and_faces(headframe_path)
+headframe_lps = cs.convert_coordinate_system(
+    headframe, "ASR", "LPS"
+)  # Preserves shape!
+
+# Load the computed transform
+trans = mr_sitk.load_sitk_transform(
+    transform_filename, homogeneous=True, invert=True
+)[0]
+
+cone = trimesh.load_mesh(cone_path)
+cone.vertices = cs.convert_coordinate_system(cone.vertices, "ASR", "LPS")
+
+probe_mesh = load_newscale_trimesh(probe_model_file, move_down=0.5)
+
+# Get chemical shift from MRI image.
+# Defaults are standard UW scans- set params for anything else.
+chem_shift = compute_chemical_shift(image)
+chem_shift_trans = chemical_shift_transform(chem_shift, readout="HF")
+# -
+
+# List targeted locations
+preferred_pts = {k: manual_annotation[k] for k in target_structures}
+
+hmg_pts = rot.prepare_data_for_homogeneous_transform(
+    np.array(tuple(preferred_pts.values()))
+)
+chem_shift_annotation = hmg_pts @ trans.T @ chem_shift_trans.T
+transformed_annotation = rot.extract_data_for_homogeneous_transform(
+    chem_shift_annotation
+)
+target_names = tuple(preferred_pts.keys())
+
+
+# %%
+
+implant_vol = sitk.ReadImage(implant_holes_path)
+
+implant_targets, implant_names = get_implant_targets(implant_vol)
+
+# Visualize Holes, list locations
+transformed_implant = rot.extract_data_for_homogeneous_transform(
+    np.dot(rot.prepare_data_for_homogeneous_transform(implant_targets), trans)
+)
+
+df = candidate_insertions(
+    transformed_annotation,
+    transformed_implant,
+    target_names,
+    implant_names,
+)
+valid = valid_insertion_pairs(df)
+
+
+# %%

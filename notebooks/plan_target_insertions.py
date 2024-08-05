@@ -29,7 +29,7 @@ from aind_mri_utils.arc_angles import arc_angles_to_hit_two_points
 
 # %%
 # File Paths
-mouse = "721682"
+mouse = "743700"
 whoami = "galen"
 if whoami == "galen":
     base_dir = Path("/mnt/aind1-vast/scratch/")
@@ -46,7 +46,7 @@ headframe_model_dir = base_dir / "ephys/persist/data/MRI/HeadframeModels/"
 probe_model_file = (
     headframe_model_dir / "dovetailtweezer_oneShank_centered_corrected.obj"
 )  # "modified_probe_holder.obj"
-annotations_path = base_dir / "ephys/persist/data/MRI/processed/{}/UW2".format(
+annotations_path = base_dir / "ephys/persist/data/MRI/processed/{}/".format(
     mouse
 )
 
@@ -166,8 +166,8 @@ manual_annotation = sf.read_slicer_fcsv(manual_annotation_path)
 
 # %%
 # List targeted locations
-prefered_pts = {
-    "LGN": manual_annotation["LGN"],
+preferred_pts = {
+    # "LGN": manual_annotation["LGN"],
     "CCant": manual_annotation["CCant"],
     "CCpst": manual_annotation["CCpst"],
     "AntComMid": manual_annotation["AntComMid"],
@@ -175,13 +175,13 @@ prefered_pts = {
 }
 
 hmg_pts = rot.prepare_data_for_homogeneous_transform(
-    np.array(tuple(prefered_pts.values()))
+    np.array(tuple(preferred_pts.values()))
 )
 chem_shift_annotation = hmg_pts @ trans.T @ chem_shift_trans.T
 transformed_annotation = rot.extract_data_for_homogeneous_transform(
     chem_shift_annotation
 )
-target_nms = tuple(prefered_pts.keys())
+target_nms = tuple(preferred_pts.keys())
 
 for ii in range(transformed_annotation.shape[0]):
     print(
@@ -265,8 +265,9 @@ for ii in range(transformed_implant.shape[0]):
 
 
 # %%
-targets = list(prefered_pts.keys())
-transformed_prefered = transformed_annotation
+preferred_pts = ["LGN", "CCant", "CCpst", "AntComMid", "GenFacCran"]
+targets = list(preferred_pts.keys())
+transformed_preferred = transformed_annotation
 
 TARGET = []
 HOLE = []
@@ -276,13 +277,13 @@ RIG_AP = []
 ML = []
 ML_Range = []
 TARGET_LOC = []
-for tt in range(transformed_prefered.shape[0]):
+for tt in range(transformed_preferred.shape[0]):
     for hh in range(transformed_implant.shape[0]):
         insertion_vector = (
-            transformed_implant[hh, :] - transformed_prefered[tt, :]
+            transformed_implant[hh, :] - transformed_preferred[tt, :]
         )
         ap, ml = arc_angles_to_hit_two_points(
-            transformed_prefered[tt, :],
+            transformed_preferred[tt, :],
             transformed_implant[hh, :],
             ap_offset=0,
         )
@@ -301,7 +302,7 @@ for tt in range(transformed_prefered.shape[0]):
         for jj in range(len(a)):
 
             this_ap, this_ml = arc_angles_to_hit_two_points(
-                transformed_prefered[tt, :], circle[jj, :], ap_offset=0
+                transformed_preferred[tt, :], circle[jj, :], ap_offset=0
             )
             this_ML.append(this_ml)
             this_AP.append(this_ap)
@@ -317,7 +318,7 @@ for tt in range(transformed_prefered.shape[0]):
             ML.append(ml)
             AP.append(ap)
             RIG_AP.append(ap + 14)
-            TARGET_LOC.append(transformed_prefered[tt, :])
+            TARGET_LOC.append(transformed_preferred[tt, :])
 
 
 df = pd.DataFrame(
@@ -430,10 +431,10 @@ for i, m in enumerate(meshes):
 
 meshes = [
     trimesh.creation.uv_sphere(radius=0.25)
-    for i in range(len(transformed_prefered))
+    for i in range(len(transformed_preferred))
 ]
 for i, m in enumerate(meshes):
-    m.apply_translation(transformed_prefered[i, :])
+    m.apply_translation(transformed_preferred[i, :])
     m.visual.vertex_colors = trimesh.visual.random_color()
     S.add_geometry(m)
 
@@ -541,10 +542,10 @@ for i, m in enumerate(meshes):
 
 meshes = [
     trimesh.creation.uv_sphere(radius=0.25)
-    for i in range(len(transformed_prefered))
+    for i in range(len(transformed_preferred))
 ]
 for i, m in enumerate(meshes):
-    m.apply_translation(transformed_prefered[i, :])
+    m.apply_translation(transformed_preferred[i, :])
     m.visual.vertex_colors = trimesh.visual.random_color()
     S.add_geometry(m)
 S.add_geometry(cone)

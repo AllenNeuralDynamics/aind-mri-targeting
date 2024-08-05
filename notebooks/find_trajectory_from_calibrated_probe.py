@@ -21,6 +21,7 @@ from aind_mri_utils.chemical_shift import (
 )
 from aind_mri_utils import rotations as rot
 from aind_mri_utils.file_io import simpleitk as mr_sitk
+import pandas as pd
 
 
 # %%
@@ -78,12 +79,14 @@ newscale_file_name = headframe_path / "Centered_Newscale_2pt0.obj"
 #
 
 
-calibration_filename = "calibration_info_np2_2024_07_31T14_17_00.xlsx"
+calibration_filename = "calibration_info_np2_2024_08_01T11_23_00.xlsx"
 calibration_dir = (
     base_dir / "ephys/persist/data/probe_calibrations/CSVCalibrations/"
 )
 calibration_file = calibration_dir / calibration_filename
-measured_hole_centers = annotations_path / "measured_hole_centers.xlsx"
+measured_hole_centers = (
+    annotations_path / "measured_hole_centers_conflict.xlsx"
+)
 
 
 # manual_hole_centers_file = annotations_path / 'hole_centers.mrk.json'
@@ -97,7 +100,10 @@ test_probe_translation_save_path = str(
 transform_filename = str(annotations_path / (mouse + "_com_plane.h5"))
 
 # %%
-target_structure_pair = [("8", "CCpst")]
+measurement_df = pd.read_excel(measured_hole_centers)
+
+# %%
+target_structure_pair = [("4", "GenFacCran1"), ("4", "GenFacCran2")]
 
 # %%
 
@@ -111,10 +117,10 @@ target_structure_pair = [("8", "CCpst")]
 
 # %%
 measurements = {
-    46100: {
-        "8": np.array(
+    46110: {
+        "4": np.array(
             [
-                [8223, 5875, 5119],
+                [9101, 4341, 6263],
             ],
             dtype=float,
         )
@@ -125,8 +131,8 @@ transform_rs = dict()
 transform_offsets = dict()
 for probe in measurements:
     reticle_coords, probe_coords = adjusted_pairs_by_probe[probe]
-    transform_rs[probe], transform_offsets[probe] = rc.fit_rotation_params(
-        reticle_pts=reticle_coords, probe_pts=probe_coords
+    transform_rs[probe], transform_offsets[probe], _ = rc.fit_rotation_params(
+        reticle_pts=reticle_coords, probe_pts=probe_coords, find_scaling=False
     )
 # %%
 transformed_global_points = dict()
@@ -163,10 +169,12 @@ transformed_annotation = rot.extract_data_for_homogeneous_transform(
 target_names = tuple(preferred_pts.keys())
 
 # %%
-transformed_global_points[46100]
+transformed_global_points[46110]
 df = candidate_insertions(
     transformed_annotation,
-    transformed_global_points[46100] * np.array([-1, -1, 1]),
+    transformed_global_points[46110] * np.array([-1, -1, 1]),
     target_names,
-    ["8"],
+    ["4", "4"],
 )
+
+# %%

@@ -145,20 +145,20 @@ def get_implant_targets(implant_vol):
 
     implant_names = []
     implant_targets = []
-    implant_pts = []
     implant_vol_arr = sitk.GetArrayFromImage(implant_vol)
     for key in label_dict.keys():
         val = label_dict[key]
         idx_tup = np.nonzero(implant_vol_arr == val)
         if len(idx_tup[0]) == 0:
             continue
-        implant_pos = np.vstack(
-            [
-                implant_vol.TransformIndexToPhysicalPoint(tup[::-1])
-                for tup in zip(idx_tup)
-            ]
-        )
-        implant_pts.append(implant_pos)
+        implant_pos_list = []
+        for tup in zip(*idx_tup):
+            # opposite indexing convention, basic python types only
+            tup_for_sitk = tuple([int(x) for x in tup[::-1]])
+            implant_pos_list.append(
+                implant_vol.TransformIndexToPhysicalPoint(tup_for_sitk)
+            )
+        implant_pos = np.vstack(implant_pos_list)
         implant_targets.append(np.mean(implant_pos, axis=0))
         this_key = key.split("-")[-1].split("_")[-1]
         implant_names.append(int(this_key))

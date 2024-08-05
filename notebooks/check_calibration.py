@@ -79,9 +79,17 @@ f, ax = plt.subplots(1, 1, figsize=(10, 10), subplot_kw=dict(projection="3d"))
 # %%
 errs = fit_reticle_pts - reticle_pts
 errs_unscaled = fit_reticle_pts_unscaled - reticle_pts
+errs_probe = fit_probe_pts - probe_pts
+errs_probe_unscaled = fit_probe_pts_unscaled - probe_pts
 med_err = np.median(np.linalg.norm(errs, axis=1))
 med_err_unscaled = np.median(np.linalg.norm(errs_unscaled, axis=1))
+med_err_probe = np.median(np.linalg.norm(errs_probe, axis=1))
+med_err_probe_unscaled = np.median(np.linalg.norm(errs_probe_unscaled, axis=1))
 X, Y, Z = [reticle_pts[:, i] for i in range(3)]
 U, V, W = [errs[:, i] for i in range(3)]
 # ax.quiver3D(X, Y, Z, U, V, W, angles="xy", scale_units="xy", scale=1)
+# %%
+probe_distances_scaled = calc_pairwise_distances(probe_pts * scaling)
+drift_scaled = reticle_distances - probe_distances_scaled
+
 # %%
