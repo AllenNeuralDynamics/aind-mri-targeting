@@ -144,7 +144,7 @@ preferred_pts = {k: manual_annotation[k] for k in target_structures}
 hmg_pts = rot.prepare_data_for_homogeneous_transform(
     np.array(tuple(preferred_pts.values()))
 )
-chem_shift_annotation = hmg_pts @ trans.T @ chem_shift_trans.T
+chem_shift_annotation = hmg_pts @ chem_shift_trans.T @ trans.T
 transformed_annotation = rot.extract_data_for_homogeneous_transform(
     chem_shift_annotation
 )
@@ -158,8 +158,12 @@ implant_vol = sitk.ReadImage(implant_holes_path)
 implant_targets, implant_names = get_implant_targets(implant_vol)
 
 # Visualize Holes, list locations
+
+transformed_implant_homog = (
+    rot.prepare_data_for_homogeneous_transform(implant_targets) @ trans.T
+)
 transformed_implant = rot.extract_data_for_homogeneous_transform(
-    np.dot(rot.prepare_data_for_homogeneous_transform(implant_targets), trans)
+    transformed_implant_homog
 )
 
 df = candidate_insertions(
