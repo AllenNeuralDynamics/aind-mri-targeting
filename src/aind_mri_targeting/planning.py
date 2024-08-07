@@ -28,6 +28,12 @@ def load_files_to_plan_insertion():
     pass
 
 
+def apply_shift_and_transform(
+    pts, rotation, translation, chemical_shift, readout_direction
+):
+    pass
+
+
 def candidate_insertions(
     transformed_annotation, transformed_implant, target_names, implant_names
 ):

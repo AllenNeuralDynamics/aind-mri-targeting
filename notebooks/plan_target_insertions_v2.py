@@ -31,10 +31,10 @@ from aind_mri_utils.chemical_shift import (
 from aind_mri_utils.arc_angles import arc_angles_to_hit_two_points
 
 import numpy as np
-
+import pandas as pd
 
 # %%
-mouse = "743700"
+mouse = "727354"
 whoami = "galen"
 if whoami == "galen":
     base_dir = Path("/mnt/aind1-vast/scratch/")
@@ -101,7 +101,7 @@ measured_hole_centers = (
 # manual_hole_centers_file = annotations_path / 'hole_centers.mrk.json'
 
 transformed_targets_save_path = annotations_path / (
-    mouse + "TransformedTargets.csv"
+    f"{mouse}_TransformedTargets.csv"
 )
 test_probe_translation_save_path = str(
     base_save_dir / "test_probe_translation.h5"
@@ -157,6 +157,7 @@ implant_vol = sitk.ReadImage(implant_holes_path)
 
 implant_targets, implant_names = get_implant_targets(implant_vol)
 
+
 # Visualize Holes, list locations
 
 transformed_implant_homog = (
@@ -166,6 +167,35 @@ transformed_implant = rot.extract_data_for_homogeneous_transform(
     transformed_implant_homog
 )
 
+# %%
+dim_names = ["ML (mm)", "AP (mm)", "DV (mm)"]
+transformed_annotation_ras = np.array([-1, -1, 1]) * transformed_annotation
+target_df = pd.DataFrame(
+    data={
+        "point": target_names,
+        **{
+            d: transformed_annotation_ras[:, i]
+            for i, d in enumerate(dim_names)
+        },
+    }
+)
+sp = np.argsort(implant_names)
+implant_names_sorted = np.array(implant_names)[sp]
+transformed_implant_sorted_ras = (
+    np.array([-1, -1, 1]) * transformed_implant[sp, :]
+)
+implant_df = pd.DataFrame(
+    data={
+        "point": [f"Hole {n}" for n in implant_names_sorted],
+        **{
+            d: transformed_implant_sorted_ras[:, i]
+            for i, d in enumerate(dim_names)
+        },
+    }
+)
+df_joined = pd.concat((target_df, implant_df), ignore_index=True)
+df_joined.to_csv(transformed_targets_save_path, index=False)
+# %%
 df = candidate_insertions(
     transformed_annotation,
     transformed_implant,
