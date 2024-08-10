@@ -251,6 +251,24 @@ def test_for_collisions(insert_list, probe_mesh, df, rotations_to_test):
     return this_angle
 
 
+def is_insertion_valid(compatibility_mat, insertion_ndxs):
+    mask = np.full(compatibility_mat.shape[0], True)
+    for ndx in insertion_ndxs:
+        mask = mask & compatibility_mat[ndx, :]
+    return np.all(mask[insertion_ndxs])
+
+
+def find_other_compatible_insertions(
+    compatibility_mat, considered_ndxs, seed_ndxs
+):
+    mask = np.full(compatibility_mat.shape[0], False)
+    mask[considered_ndxs] = True
+    for ndx in seed_ndxs:
+        mask = mask & compatibility_mat[ndx, :]
+    mask[seed_ndxs] = False
+    return np.nonzero(mask)[0]
+
+
 def make_final_insertion_scene(
     working_angle,
     headframe_mesh,
