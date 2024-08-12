@@ -7,7 +7,7 @@ from aind_mri_utils import reticle_calibrations as rc
 from aind_mri_utils.file_io import slicer_files as sf
 from aind_mri_targeting.planning import (
     candidate_insertions,
-    valid_insertion_pairs,
+    compatible_insertion_pairs,
     transform_matrix_from_angles_and_target,
     get_implant_targets,
     make_final_insertion_scene,

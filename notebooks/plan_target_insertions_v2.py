@@ -1,7 +1,7 @@
 # %%
 from aind_mri_targeting.planning import (
     candidate_insertions,
-    valid_insertion_pairs,
+    compatible_insertion_pairs,
     transform_matrix_from_angles_and_target,
     get_implant_targets,
     make_final_insertion_scene,
@@ -28,7 +28,7 @@ from aind_mri_utils.chemical_shift import (
     compute_chemical_shift,
     chemical_shift_transform,
 )
-from aind_mri_utils.arc_angles import arc_angles_to_hit_two_points
+from aind_mri_utils.arc_angles import calculate_arc_angles
 
 import numpy as np
 import pandas as pd
@@ -202,7 +202,7 @@ df = candidate_insertions(
     target_names,
     implant_names,
 )
-valid = valid_insertion_pairs(df)
+valid = compatible_insertion_pairs(df)
 
 
 # %%

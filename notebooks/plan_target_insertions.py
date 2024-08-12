@@ -24,7 +24,7 @@ from aind_mri_utils.chemical_shift import (
     compute_chemical_shift,
     chemical_shift_transform,
 )
-from aind_mri_utils.arc_angles import arc_angles_to_hit_two_points
+from aind_mri_utils.arc_angles import calculate_arc_angles
 
 
 # %%
@@ -282,7 +282,7 @@ for tt in range(transformed_preferred.shape[0]):
         insertion_vector = (
             transformed_implant[hh, :] - transformed_preferred[tt, :]
         )
-        ap, ml = arc_angles_to_hit_two_points(
+        ap, ml = calculate_arc_angles(
             transformed_preferred[tt, :],
             transformed_implant[hh, :],
             ap_offset=0,
@@ -301,7 +301,7 @@ for tt in range(transformed_preferred.shape[0]):
 
         for jj in range(len(a)):
 
-            this_ap, this_ml = arc_angles_to_hit_two_points(
+            this_ap, this_ml = calculate_arc_angles(
                 transformed_preferred[tt, :], circle[jj, :], ap_offset=0
             )
             this_ML.append(this_ml)
