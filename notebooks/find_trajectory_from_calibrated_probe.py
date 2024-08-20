@@ -7,13 +7,6 @@ from aind_mri_utils import reticle_calibrations as rc
 from aind_mri_utils.file_io import slicer_files as sf
 from aind_mri_targeting.planning import (
     candidate_insertions,
-    valid_insertion_pairs,
-    transform_matrix_from_angles_and_target,
-    get_implant_targets,
-    make_final_insertion_scene,
-    make_scene_for_insertion,
-    test_for_collisions,
-    plan_insertion,
 )
 from aind_mri_utils.chemical_shift import (
     compute_chemical_shift,
@@ -21,11 +14,10 @@ from aind_mri_utils.chemical_shift import (
 )
 from aind_mri_utils import rotations as rot
 from aind_mri_utils.file_io import simpleitk as mr_sitk
-import pandas as pd
 
 
 # %%
-mouse = "743700"
+mouse = "721685"
 whoami = "galen"
 if whoami == "galen":
     base_dir = Path("/mnt/aind1-vast/scratch/")
@@ -42,7 +34,7 @@ headframe_model_dir = base_dir / "ephys/persist/data/MRI/HeadframeModels/"
 probe_model_file = (
     headframe_model_dir / "dovetailtweezer_oneShank_centered_corrected.obj"
 )  # "modified_probe_holder.obj"
-annotations_path = base_dir / "ephys/persist/data/MRI/processed/{}".format(
+annotations_path = base_dir / "ephys/persist/data/MRI/processed/{}/HF".format(
     mouse
 )
 
@@ -68,7 +60,7 @@ manual_annotation_path = str(
 )
 cone_path = (
     base_dir
-    / "ephys/persist/Software/PinpointBuilds/WavefrontFiles/Cone_0160-200-53.obj"
+    / "ephys/persist/Software/PinpointBuilds/WavefrontFiles/Cone_0160-200-53.obj"  # noqa E501
 )
 
 uw_yoni_annotation_path = (
@@ -79,7 +71,7 @@ newscale_file_name = headframe_path / "Centered_Newscale_2pt0.obj"
 #
 
 
-calibration_filename = "calibration_info_np2_2024_08_01T11_23_00.xlsx"
+calibration_filename = "calibration_info_np2_2024_08_13T09_57_00.xlsx"
 calibration_dir = (
     base_dir / "ephys/persist/data/probe_calibrations/CSVCalibrations/"
 )
@@ -100,10 +92,10 @@ test_probe_translation_save_path = str(
 transform_filename = str(annotations_path / (mouse + "_com_plane.h5"))
 
 # %%
-measurement_df = pd.read_excel(measured_hole_centers)
+# measurement_df = pd.read_excel(measured_hole_centers)
 
 # %%
-target_structure_pair = [("4", "GenFacCran1"), ("4", "GenFacCran2")]
+target_structure_pair = [("4", "CCant"), ("3", "CCant")]
 
 # %%
 
@@ -118,30 +110,52 @@ target_structure_pair = [("4", "GenFacCran1"), ("4", "GenFacCran2")]
 # %%
 measurements = {
     46110: {
-        "4": np.array(
+        "3": np.array(
             [
-                [9101, 4341, 6263],
+                [8301, 7747, 8700],
             ],
             dtype=float,
-        )
-    }
+        ),
+    },
 }
+probe_scales = {46100: False, 46110: False}
 # %%
 transform_rs = dict()
 transform_offsets = dict()
+scaling_vecs = dict()
 for probe in measurements:
     reticle_coords, probe_coords = adjusted_pairs_by_probe[probe]
-    transform_rs[probe], transform_offsets[probe], _ = rc.fit_rotation_params(
-        reticle_pts=reticle_coords, probe_pts=probe_coords, find_scaling=False
-    )
+    if probe_scales[probe]:
+        (
+            transform_rs[probe],
+            scaling_vecs[probe],
+            transform_offsets[probe],
+            _,
+        ) = rc.fit_rotation_params(
+            reticle_pts=reticle_coords,
+            probe_pts=probe_coords,
+            find_scaling=True,
+        )
+    else:
+        transform_rs[probe], transform_offsets[probe], _ = (
+            rc.fit_rotation_params(
+                reticle_pts=reticle_coords,
+                probe_pts=probe_coords,
+                find_scaling=False,
+            )
+        )
+        scaling_vecs[probe] = None
+
 # %%
 transformed_global_points = dict()
 for probe in measurements:
+    transformed_global_points[probe] = dict()
     for name, coord in measurements[probe].items():
-        transformed_global_points[probe] = rc.transform_probe_to_reticle(
+        transformed_global_points[probe][name] = rc.transform_probe_to_reticle(
             measurements[probe][name] / 1000,
             transform_rs[probe],
             transform_offsets[probe],
+            scale=scaling_vecs[probe],
         )
 # %%
 manual_annotation = sf.read_slicer_fcsv(manual_annotation_path)
@@ -172,9 +186,9 @@ target_names = tuple(preferred_pts.keys())
 transformed_global_points[46110]
 df = candidate_insertions(
     transformed_annotation,
-    transformed_global_points[46110] * np.array([-1, -1, 1]),
+    transformed_global_points[46110]["3"] * np.array([-1, -1, 1]),
     target_names,
-    ["4", "4"],
+    ["3"],
 )
 
 # %%

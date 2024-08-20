@@ -1,13 +1,9 @@
 # %%
 from aind_mri_targeting.planning import (
     candidate_insertions,
-    valid_insertion_pairs,
-    transform_matrix_from_angles_and_target,
+    compatible_insertion_pairs,
     get_implant_targets,
-    make_final_insertion_scene,
     make_scene_for_insertion,
-    test_for_collisions,
-    plan_insertion,
 )
 from aind_mri_utils.file_io import slicer_files as sf
 
@@ -15,26 +11,24 @@ from pathlib import Path
 import trimesh
 import SimpleITK as sitk
 from aind_mri_utils import rotations as rot
-from aind_mri_utils.file_io import slicer_files as sf
 from aind_mri_utils.file_io import simpleitk as mr_sitk
 from aind_mri_utils.file_io.obj_files import get_vertices_and_faces
 from aind_mri_utils import coordinate_systems as cs
-from aind_mri_utils.optimization import (
-    get_headframe_hole_lines,
-    append_ones_column,
-)
 from aind_mri_utils.meshes import load_newscale_trimesh
 from aind_mri_utils.chemical_shift import (
     compute_chemical_shift,
     chemical_shift_transform,
 )
-from aind_mri_utils.arc_angles import arc_angles_to_hit_two_points
+
+from aind_mri_utils.planning import (
+    find_other_compatible_insertions,
+)
 
 import numpy as np
 import pandas as pd
 
 # %%
-mouse = "727354"
+mouse = "721685"
 whoami = "galen"
 if whoami == "galen":
     base_dir = Path("/mnt/aind1-vast/scratch/")
@@ -51,7 +45,7 @@ headframe_model_dir = base_dir / "ephys/persist/data/MRI/HeadframeModels/"
 probe_model_file = (
     headframe_model_dir / "dovetailtweezer_oneShank_centered_corrected.obj"
 )  # "modified_probe_holder.obj"
-annotations_path = base_dir / "ephys/persist/data/MRI/processed/{}/".format(
+annotations_path = base_dir / "ephys/persist/data/MRI/processed/{}/HF".format(
     mouse
 )
 
@@ -77,7 +71,7 @@ manual_annotation_path = str(
 )
 cone_path = (
     base_dir
-    / "ephys/persist/Software/PinpointBuilds/WavefrontFiles/Cone_0160-200-53.obj"
+    / "ephys/persist/Software/PinpointBuilds/WavefrontFiles/Cone_0160-200-53.obj"  # noqa E501
 )
 
 uw_yoni_annotation_path = (
@@ -167,6 +161,7 @@ transformed_implant = rot.extract_data_for_homogeneous_transform(
     transformed_implant_homog
 )
 
+
 # %%
 dim_names = ["ML (mm)", "AP (mm)", "DV (mm)"]
 transformed_annotation_ras = np.array([-1, -1, 1]) * transformed_annotation
@@ -196,13 +191,52 @@ implant_df = pd.DataFrame(
 df_joined = pd.concat((target_df, implant_df), ignore_index=True)
 df_joined.to_csv(transformed_targets_save_path, index=False)
 # %%
+for i, n in enumerate(implant_names_sorted):
+    print(f"{n}: {transformed_implant_sorted_ras[i]}")
+# %%
 df = candidate_insertions(
     transformed_annotation,
     transformed_implant,
     target_names,
     implant_names,
 )
-valid = valid_insertion_pairs(df)
+compat_matrix = compatible_insertion_pairs(df)
 
+
+# %%
+seed_insertions = []
+bad_holes = {0, 1, 2, 7, 9, 10}
+bad_mask = np.isin(df.hole.to_numpy(), list(bad_holes))
+target_mask = df.target.to_numpy() == "CCant"
+keep_mask = np.logical_and(np.logical_not(bad_mask), target_mask)
+consider_ndxs = np.nonzero(keep_mask)[0]
+target_ndxs = np.nonzero(df.target.to_numpy() == "CCant")[0]
+print(df.iloc[consider_ndxs])
+
+# %%
+nonbad_ndxs = np.nonzero(np.logical_not(bad_mask))[0]
+seed_insertions = [48]
+compatible_insertions = find_other_compatible_insertions(
+    compat_matrix, nonbad_ndxs, seed_insertions
+)
+df.loc[np.concatenate([seed_insertions, compatible_insertions])]
+
+
+# %%
+headframe_mesh = trimesh.Trimesh()
+headframe_mesh.vertices = headframe_lps
+headframe_mesh.faces = headframe_faces
+
+S = make_scene_for_insertion(
+    headframe_mesh,
+    cone,
+    transformed_implant,
+    transformed_annotation,
+    seed_insertions,
+    df,
+    probe_mesh,
+)
+
+S.show()
 
 # %%
