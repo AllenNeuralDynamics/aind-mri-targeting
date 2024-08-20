@@ -1,35 +1,26 @@
 import numpy as np
 import SimpleITK as sitk
-import pandas as pd
 import trimesh
-from itertools import product
-from scipy.spatial.transform import Rotation
-
 
 # Functions from aind_mri_utils
-from aind_mri_utils import rotations as rot
-from aind_mri_utils.file_io import slicer_files as sf
-from aind_mri_utils.file_io import simpleitk as mr_sitk
-from aind_mri_utils.file_io.obj_files import get_vertices_and_faces
 from aind_mri_utils import coordinate_systems as cs
-from aind_mri_utils.meshes import load_newscale_trimesh
+from aind_mri_utils import rotations as rot
 from aind_mri_utils.chemical_shift import (
-    compute_chemical_shift,
     chemical_shift_transform,
+    compute_chemical_shift,
 )
-from aind_mri_utils.arc_angles import (
-    calculate_arc_angles,
-    transform_matrix_from_angles_and_target,
-)
+from aind_mri_utils.file_io import simpleitk as mr_sitk
+from aind_mri_utils.file_io import slicer_files as sf
+from aind_mri_utils.file_io.obj_files import get_vertices_and_faces
+from aind_mri_utils.meshes import load_newscale_trimesh
 from aind_mri_utils.planning import (
     candidate_insertions,
     compatible_insertion_pairs,
-    get_implant_targets,
-    is_insertion_valid,
     find_other_compatible_insertions,
-    test_for_collisions,
-    make_scene_for_insertion,
+    get_implant_targets,
     make_final_insertion_scene,
+    make_scene_for_insertion,
+    test_for_collisions,
 )
 
 
