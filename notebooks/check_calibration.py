@@ -1,15 +1,14 @@
 # %%
 # Imports
-import numpy as np
-from aind_mri_utils import reticle_calibrations as rc
-from aind_mri_utils import parallax_calibration as pc
-from aind_mri_utils import rotations as rot
-
-import itertools as itr
-from matplotlib import pyplot as plt
-
 # %%
 import importlib
+import itertools as itr
+
+import numpy as np
+from aind_mri_utils import parallax_calibration as pc
+from aind_mri_utils import reticle_calibrations as rc
+from aind_mri_utils import rotations as rot
+from matplotlib import pyplot as plt
 
 importlib.reload(rc)
 # %%
