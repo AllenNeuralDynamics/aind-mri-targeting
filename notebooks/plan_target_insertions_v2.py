@@ -1,31 +1,28 @@
 # %%
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import SimpleITK as sitk
+import trimesh
+from aind_mri_utils import coordinate_systems as cs
+from aind_mri_utils import rotations as rot
+from aind_mri_utils.chemical_shift import (
+    chemical_shift_transform,
+    compute_chemical_shift,
+)
+from aind_mri_utils.file_io import simpleitk as mr_sitk
+from aind_mri_utils.file_io import slicer_files as sf
+from aind_mri_utils.file_io.obj_files import get_vertices_and_faces
+from aind_mri_utils.meshes import load_newscale_trimesh
+from aind_mri_utils.planning import find_other_compatible_insertions
+
 from aind_mri_targeting.planning import (
     candidate_insertions,
     compatible_insertion_pairs,
     get_implant_targets,
     make_scene_for_insertion,
 )
-from aind_mri_utils.file_io import slicer_files as sf
-
-from pathlib import Path
-import trimesh
-import SimpleITK as sitk
-from aind_mri_utils import rotations as rot
-from aind_mri_utils.file_io import simpleitk as mr_sitk
-from aind_mri_utils.file_io.obj_files import get_vertices_and_faces
-from aind_mri_utils import coordinate_systems as cs
-from aind_mri_utils.meshes import load_newscale_trimesh
-from aind_mri_utils.chemical_shift import (
-    compute_chemical_shift,
-    chemical_shift_transform,
-)
-
-from aind_mri_utils.planning import (
-    find_other_compatible_insertions,
-)
-
-import numpy as np
-import pandas as pd
 
 # %%
 mouse = "721685"

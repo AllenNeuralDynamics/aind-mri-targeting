@@ -1,31 +1,30 @@
 # %%
 # Basic python functions that we need
-from pathlib import Path
-import numpy as np
-import SimpleITK as sitk
-import pandas as pd
-import trimesh
 from itertools import product
-from scipy.spatial.transform import Rotation
+from pathlib import Path
 
+import numpy as np
+import pandas as pd
+import SimpleITK as sitk
+import trimesh
 
 # Functions from aind_mri_utils
-from aind_mri_utils import rotations as rot
-from aind_mri_utils.file_io import slicer_files as sf
-from aind_mri_utils.file_io import simpleitk as mr_sitk
-from aind_mri_utils.file_io.obj_files import get_vertices_and_faces
 from aind_mri_utils import coordinate_systems as cs
-from aind_mri_utils.optimization import (
-    get_headframe_hole_lines,
-    append_ones_column,
-)
-from aind_mri_utils.meshes import load_newscale_trimesh
-from aind_mri_utils.chemical_shift import (
-    compute_chemical_shift,
-    chemical_shift_transform,
-)
+from aind_mri_utils import rotations as rot
 from aind_mri_utils.arc_angles import calculate_arc_angles
-
+from aind_mri_utils.chemical_shift import (
+    chemical_shift_transform,
+    compute_chemical_shift,
+)
+from aind_mri_utils.file_io import simpleitk as mr_sitk
+from aind_mri_utils.file_io import slicer_files as sf
+from aind_mri_utils.file_io.obj_files import get_vertices_and_faces
+from aind_mri_utils.meshes import load_newscale_trimesh
+from aind_mri_utils.optimization import (
+    append_ones_column,
+    get_headframe_hole_lines,
+)
+from scipy.spatial.transform import Rotation
 
 # %%
 # File Paths
