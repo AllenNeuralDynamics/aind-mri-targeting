@@ -37,13 +37,12 @@
 
 # %%
 from pathlib import Path
+
 import numpy as np
+import pandas as pd
 
 # %matplotlib inline
 from aind_mri_utils import reticle_calibrations as rc
-
-import pandas as pd
-
 
 # %%
 # Set file paths and mouse ID here
