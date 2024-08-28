@@ -12,7 +12,7 @@ from aind_mri_utils.chemical_shift import (
 from aind_mri_utils.file_io import simpleitk as mr_sitk
 from aind_mri_utils.file_io import slicer_files as sf
 
-from aind_mri_targeting.planning import candidate_insertions
+from aind_mri_utils.planning import candidate_insertions
 
 # %%
 mouse = "721685"

@@ -115,7 +115,7 @@ test_probe_translation_save_path = str(
 transform_filename = str(annotations_path / (mouse + "_com_plane.h5"))
 
 # %%
-target_structures = ["CCant", "CCpst", "AntComMid", "GenFacCran2"]
+target_structures = None  # ["CCant", "CCpst", "AntComMid", "GenFacCran2"]
 
 # %%
 image = sitk.ReadImage(image_path)
@@ -150,6 +150,8 @@ chem_shift_trans = chemical_shift_transform(chem_shift, readout="HF")
 # -
 
 # List targeted locations
+if target_structures is None:
+    target_structures = list(manual_annotation.keys())
 preferred_pts = {k: manual_annotation[k] for k in target_structures}
 
 hmg_pts = rot.prepare_data_for_homogeneous_transform(
@@ -331,10 +333,18 @@ compat_matrix = compatible_insertion_pairs(df)
 
 
 # %%
-df[df.target == "AntComMid"]
+df[df.target == "GPe_anterior"]
 # %%
-seed_insertions = [31, 47, 4]  # [37,17,48] # LGN,LC,ACT
-considered_ndxs = np.arange(len(df))
+seed_insertions = [74, 76, 77, 78, 79, 80, 82, 83, 88, 90, 91, 92, 93, 96, 97, 104, 105, 106, 107, 108, 110, 111]  # [37,17,48] # LGN,LC,ACT
+bad_holes = [0, 1, 2, 3]
+good_holes_mask = np.logical_not(np.isin(df.hole.to_numpy(), bad_holes))
+target_mask = np.logical_not(
+    np.isin(
+        df.target.to_numpy(), np.array(["AntComMid", "CCant", "GenFacCran2"])
+    )
+)
+consider_mask = np.logical_and(good_holes_mask, target_mask)
+considered_ndxs = np.nonzero(consider_mask)[0]
 # match_insertions = [17,39,34] # GVII,CC,RN
 other_insertions = find_other_compatible_insertions(
     compat_matrix, considered_ndxs, seed_insertions
@@ -345,6 +355,29 @@ df.iloc[np.concatenate([seed_insertions, other_insertions])]
 
 # %%
 df.iloc[np.array(seed_insertions)]
+# %%
+insertion_df = df.iloc[np.array(seed_insertions)]
+data = []
+for i, row in insertion_df.iterrows():
+    ml, ap, dv = np.array([-1, -1, 1]) * row["target_loc"]
+    data.append(
+        {
+            "Target": row["target"],
+            #"Annotation": None,
+            #"Headframe Registration": None,
+            #"Coordinate Sys": None,
+            #"CCF ML (um)": None,
+            #"CCF AP (um)": None,
+            #"CCF DV (um)": None,
+            "Target ML (mm)": ml,
+            "Target AP (mm)": ap,
+            "Target DV (mm)": dv,
+            "Intended Hole": row["hole"],
+            "Arc AP": row["rig_ap"],
+            "Arc ML": row["ml"],
+        }
+    )
+target_sheet_df = pd.DataFrame(data)
 
 # %%
 
@@ -365,12 +398,12 @@ cone = trimesh.load_mesh(cone_path)
 cone.vertices = cs.convert_coordinate_system(cone.vertices, "ASR", "LPS")
 
 
-CM = trimesh.collision.CollisionManager()
-
-
 new_mesh = trimesh.Trimesh()
 new_mesh.vertices = headframe_lps
 new_mesh.faces = headframe_faces[0]
+# %%
+CM = trimesh.collision.CollisionManager()
+
 
 implant, implant_faces = get_vertices_and_faces(implant_model_path)
 implant_lps = cs.convert_coordinate_system(
@@ -453,7 +486,7 @@ for this_angle in angle_sets:
     for this_insertion in range(len(seed_insertions)):
         CM.remove_object(f"mesh{this_insertion}")
 
-
+# %%
 S = trimesh.scene.Scene([new_mesh])
 
 S.add_geometry(new_mesh)

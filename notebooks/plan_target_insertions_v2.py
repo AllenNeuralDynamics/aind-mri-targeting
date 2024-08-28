@@ -17,7 +17,7 @@ from aind_mri_utils.file_io.obj_files import get_vertices_and_faces
 from aind_mri_utils.meshes import load_newscale_trimesh
 from aind_mri_utils.planning import find_other_compatible_insertions
 
-from aind_mri_targeting.planning import (
+from aind_mri_utils.planning import (
     candidate_insertions,
     compatible_insertion_pairs,
     get_implant_targets,
@@ -25,7 +25,7 @@ from aind_mri_targeting.planning import (
 )
 
 # %%
-mouse = "721685"
+mouse = "750105"
 whoami = "galen"
 if whoami == "galen":
     base_dir = Path("/mnt/aind1-vast/scratch/")
@@ -42,7 +42,7 @@ headframe_model_dir = base_dir / "ephys/persist/data/MRI/HeadframeModels/"
 probe_model_file = (
     headframe_model_dir / "dovetailtweezer_oneShank_centered_corrected.obj"
 )  # "modified_probe_holder.obj"
-annotations_path = base_dir / "ephys/persist/data/MRI/processed/{}/HF".format(
+annotations_path = base_dir / "ephys/persist/data/MRI/processed/{}".format(
     mouse
 )
 
@@ -100,7 +100,7 @@ test_probe_translation_save_path = str(
 transform_filename = str(annotations_path / (mouse + "_com_plane.h5"))
 
 # %%
-target_structures = ["CCant", "CCpst", "AntComMid", "GenFacCran2"]
+target_structures = None  # ["CCant", "CCpst", "AntComMid", "GenFacCran2"]
 
 # %%
 image = sitk.ReadImage(image_path)
@@ -130,6 +130,8 @@ chem_shift_trans = chemical_shift_transform(chem_shift, readout="HF")
 # -
 
 # List targeted locations
+if target_structures is None:
+    target_structures = list(manual_annotation.keys())
 preferred_pts = {k: manual_annotation[k] for k in target_structures}
 
 hmg_pts = rot.prepare_data_for_homogeneous_transform(
@@ -202,8 +204,8 @@ compat_matrix = compatible_insertion_pairs(df)
 
 # %%
 seed_insertions = []
-bad_holes = {0, 1, 2, 7, 9, 10}
-bad_mask = np.isin(df.hole.to_numpy(), list(bad_holes))
+bad_holes = [0, 1, 2, 7, 9, 10]
+bad_mask = np.isin(df.hole.to_numpy(), bad_holes)
 target_mask = df.target.to_numpy() == "CCant"
 keep_mask = np.logical_and(np.logical_not(bad_mask), target_mask)
 consider_ndxs = np.nonzero(keep_mask)[0]
