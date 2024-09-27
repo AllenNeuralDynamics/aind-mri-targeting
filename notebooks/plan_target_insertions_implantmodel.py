@@ -36,6 +36,7 @@ from aind_mri_utils.reticle_calibrations import (
 
 # %%
 mouse = "728537"
+vaseline_ppm = 3.67  # (3.7 + 4.1) / 2 for previouse
 whoami = "galen"
 if whoami == "galen":
     base_dir = Path("/mnt/aind1-vast/scratch/")
@@ -145,7 +146,7 @@ probe_mesh = load_newscale_trimesh(probe_model_file, move_down=0.5)
 
 # Get chemical shift from MRI image.
 # Defaults are standard UW scans- set params for anything else.
-chem_shift = compute_chemical_shift(image)
+chem_shift = compute_chemical_shift(image, ppm=vaseline_ppm)
 chem_shift_trans = chemical_shift_transform(chem_shift, readout="HF")
 # -
 
