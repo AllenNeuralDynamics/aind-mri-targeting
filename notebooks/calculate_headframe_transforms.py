@@ -13,6 +13,7 @@ force = False  # True to overwrite existing files
 # True to write SITK transform for volumes instead of points
 volume_transforms = True
 segment_format = None  # default is "{}_{}"
+ignore_list = []  # list of segment names to ignore
 # %%
 hr.calculate_headframe_transforms(
     mri_path,
@@ -23,4 +24,5 @@ hr.calculate_headframe_transforms(
     segment_format=segment_format,
     force=force,
     volume_transforms=volume_transforms,
+    ignore_list=ignore_list,
 )

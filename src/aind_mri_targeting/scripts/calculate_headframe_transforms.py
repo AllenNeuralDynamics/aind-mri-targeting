@@ -33,6 +33,13 @@ def parse_args():
         default=False,
         help="force overwrite",
     )
+    parser.add_argument(
+        "-i",
+        "--ignore",
+        nargs="+",
+        default=[],
+        help="list of segment names to ignore",
+    )
     return parser.parse_args()
 
 
@@ -47,6 +54,7 @@ def main():
         segment_format=args.segment_format,
         force=args.force,
         volume_transforms=args.volume_transform,
+        ignore_list=args.ignore,
     )
     return 0
 

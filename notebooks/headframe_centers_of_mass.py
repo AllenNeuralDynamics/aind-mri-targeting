@@ -22,6 +22,8 @@ force = False
 # Must match the segments in the segmentation file. If not, specify the key
 # format.
 segment_format = None
+
+ignore_list = []  # list of segment names to ignore
 # %%
 headframes_centers_of_mass(
     mri_path,
@@ -30,4 +32,5 @@ headframes_centers_of_mass(
     mouse_id=mouse_id,
     segment_format=segment_format,
     force=force,
+    ignore_list=ignore_list,
 )
