@@ -11,15 +11,22 @@ from aind_mri_utils import rotations as mrrot
 from aind_mri_utils.file_io import slicer_files as sf
 
 from . import util as mrt_ut
+from pathlib import Path
+from typing import Dict, Tuple, List
 
 
-def try_open_sitk(path):
+def try_open_sitk(path: str) -> sitk.Image:
     if not os.path.exists(path):
         raise FileNotFoundError(f"File {path} not found")
     return sitk.ReadImage(path)
 
 
-def create_savenames(savepath, save_format, orient_names, ap_names):
+def create_savenames(
+    savepath: Path,
+    save_format: str,
+    orient_names: Tuple[str, str],
+    ap_names: Tuple[str, str],
+) -> Dict[str, Dict[str, Path]]:
     save_names = dict()
     for orient in orient_names:
         save_names[orient] = dict()
@@ -29,15 +36,16 @@ def create_savenames(savepath, save_format, orient_names, ap_names):
 
 
 def headframe_centers_of_mass(
-    mri_path,
-    segmentation_path,
-    output_path=None,
-    segment_format=None,
-    mouse_id=None,
-    ap_names=("anterior", "posterior"),
-    orient_names=("horizontal", "vertical"),
-    force=False,
-):
+    mri_path: str,
+    segmentation_path: str,
+    output_path: str = None,
+    segment_format: str = None,
+    mouse_id: str = None,
+    ap_names: Tuple[str, str] = ("anterior", "posterior"),
+    orient_names: Tuple[str, str] = ("horizontal", "vertical"),
+    force: bool = False,
+    ignore_list: List[str] = [],
+) -> None:
     """
     Compute the centers of mass for headframe segments in MRI images and save
     them to files.
@@ -67,6 +75,9 @@ def headframe_centers_of_mass(
     force : bool, optional
         If True, overwrite existing files in the output directory. If False,
         raise an error if a file already exists.  The default is False.
+    ignore_list : list of str, optional
+        List of segment names to ignore. If empty, no segments are ignored. The
+        default is [].
 
     Returns
     -------
@@ -133,7 +144,7 @@ def headframe_centers_of_mass(
     seg_img = try_open_sitk(segmentation_path)
     _, seg_odict = nrrd.read(segmentation_path)
     seg_vals = hr.segment_dict_from_seg_odict(
-        seg_odict, segment_format, ap_names, orient_names
+        seg_odict, segment_format, ap_names, orient_names, ignore_list
     )
 
     coms_dict = hr.estimate_coms_from_image_and_segmentation(
@@ -150,7 +161,9 @@ def headframe_centers_of_mass(
     return
 
 
-def theta_to_sitk_affine(theta, inverse=False):
+def theta_to_sitk_affine(
+    theta: List[float], inverse: bool = False
+) -> sitk.AffineTransform:
     """
     Convert a set of theta parameters to a SimpleITK affine transformation.
 
@@ -180,15 +193,16 @@ def theta_to_sitk_affine(theta, inverse=False):
 
 
 def calculate_headframe_transforms(
-    img_path,
-    seg_path,
-    lower_plane_path,
-    output_path=None,
-    mouse_name=None,
-    volume_transforms=True,
-    segment_format="{}_{}",
-    force=False,
-):
+    img_path: str,
+    seg_path: str,
+    lower_plane_path: str,
+    output_path: str = None,
+    mouse_name: str = None,
+    volume_transforms: bool = True,
+    segment_format: str = "{}_{}",
+    force: bool = False,
+    ignore_list: List[str] = [],
+) -> None:
     """
     Calculate rotations from segmentation.
 
@@ -216,6 +230,8 @@ def calculate_headframe_transforms(
         Format for segment names. Defaults to "{}_{}".
     force : bool, optional
         Whether to overwrite existing output files. Defaults to False.
+    ignore_list : list of str, optional
+        List of segment names to ignore. Defaults to [].
 
     Returns
     -------
@@ -242,7 +258,12 @@ def calculate_headframe_transforms(
     _, seg_odict = nrrd.read(seg_path)
     theta_angle, theta_coms, theta_coms_plane = (
         hr.find_hf_rotation_from_seg_and_lowerplane(
-            img, seg_img, seg_odict, plane_pts, segment_format
+            img,
+            seg_img,
+            seg_odict,
+            plane_pts,
+            segment_format,
+            ignore_list=ignore_list,
         )
     )
     for fname, theta in zip(
