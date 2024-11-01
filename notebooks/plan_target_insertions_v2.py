@@ -1,5 +1,5 @@
 # %%
-from aind_mri_targeting.planning import (
+from aind_mri_utils.planning import (
     candidate_insertions,
     compatible_insertion_pairs,
     get_implant_targets,
@@ -28,8 +28,8 @@ import numpy as np
 import pandas as pd
 
 # %%
-mouse = "721685"
-whoami = "galen"
+mouse = "750106"
+whoami = "yoni"
 if whoami == "galen":
     base_dir = Path("/mnt/aind1-vast/scratch/")
     base_save_dir = Path("/home/galen.lynch/")
@@ -45,7 +45,7 @@ headframe_model_dir = base_dir / "ephys/persist/data/MRI/HeadframeModels/"
 probe_model_file = (
     headframe_model_dir / "dovetailtweezer_oneShank_centered_corrected.obj"
 )  # "modified_probe_holder.obj"
-annotations_path = base_dir / "ephys/persist/data/MRI/processed/{}/HF".format(
+annotations_path = base_dir / "ephys/persist/data/MRI/processed/{}/UW".format(
     mouse
 )
 
@@ -67,7 +67,7 @@ brain_mask_path = str(
     annotations_path / ("{}_auto_skull_strip.nrrd".format(mouse))
 )
 manual_annotation_path = str(
-    annotations_path / (f"{mouse}_ManualAnnotations.fcsv")
+    annotations_path / (f"fiducials-{mouse}-transformed.fcsv")#(f"{mouse}_ManualAnnotations.fcsv")
 )
 cone_path = (
     base_dir
@@ -95,7 +95,7 @@ measured_hole_centers = (
 # manual_hole_centers_file = annotations_path / 'hole_centers.mrk.json'
 
 transformed_targets_save_path = annotations_path / (
-    f"{mouse}_TransformedTargets.csv"
+    f"{mouse}_TransformedTargets_coms.csv"
 )
 test_probe_translation_save_path = str(
     base_save_dir / "test_probe_translation.h5"
@@ -103,7 +103,7 @@ test_probe_translation_save_path = str(
 transform_filename = str(annotations_path / (mouse + "_com_plane.h5"))
 
 # %%
-target_structures = ["CCant", "CCpst", "AntComMid", "GenFacCran2"]
+target_structures = ["CCant", "CCpst", "AntComMid", "GenFacCran2",'LGN']
 
 # %%
 image = sitk.ReadImage(image_path)
@@ -128,7 +128,7 @@ probe_mesh = load_newscale_trimesh(probe_model_file, move_down=0.5)
 
 # Get chemical shift from MRI image.
 # Defaults are standard UW scans- set params for anything else.
-chem_shift = compute_chemical_shift(image)
+chem_shift = compute_chemical_shift(image,ppm = 3.67)
 chem_shift_trans = chemical_shift_transform(chem_shift, readout="HF")
 # -
 
@@ -200,8 +200,16 @@ df = candidate_insertions(
     target_names,
     implant_names,
 )
+
+df.to_csv(annotations_path/f'{mouse}_candidate_insertions_com.csv')
 compat_matrix = compatible_insertion_pairs(df)
 
+
+# %%
+df[df.target== 'LGN']
+
+# %%
+df[df.target=='CCant']
 
 # %%
 seed_insertions = []

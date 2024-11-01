@@ -33,7 +33,7 @@ import numpy as np
 import pandas as pd
 
 # %%
-mouse = "728537"
+mouse = "754371"
 whoami = "yoni"
 if whoami == "galen":
     base_dir = Path("/mnt/aind1-vast/scratch/")
@@ -50,13 +50,13 @@ headframe_model_dir = base_dir / "ephys/persist/data/MRI/HeadframeModels/"
 probe_model_file = (
     headframe_model_dir / "dovetailtweezer_oneShank_centered_corrected.obj"
 )  # "modified_probe_holder.obj"
-annotations_path = base_dir / "ephys/persist/data/MRI/processed/{}/UW".format(
+annotations_path = base_dir / "ephys/persist/data/MRI/processed/{}".format(
     mouse
 )
 
 hole_folder = headframe_model_dir/'HoleOBJs'
 implant_model_path = headframe_model_dir/'0283-300-04.obj'
-implant_transform = annotations_path/f"{mouse}_implant_annotations_to_lps_implant_model_with_brain_better_normalization.h5"
+implant_transform = annotations_path/f"{mouse}_implant_annotations_to_lps.h5"
 
 headframe_path = headframe_model_dir / "TenRunHeadframe.obj"
 holes_path = headframe_model_dir / "OneOff_HolesOnly.obj"
@@ -84,7 +84,7 @@ cone_path = (
 )
 
 uw_yoni_annotation_path = (
-    annotations_path / f"targets-{mouse}-transformed.fcsv"
+    annotations_path / f"fiducials-{mouse}-transformed.fcsv"
 )
 
 newscale_file_name = headframe_path / "Centered_Newscale_2pt0.obj"
@@ -112,12 +112,13 @@ test_probe_translation_save_path = str(
 transform_filename = str(annotations_path / (mouse + "_com_plane.h5"))
 
 # %%
-target_structures = ["CCant", "CCpst", "AntComMid", "GenFacCran2"]
+target_structures = ["AntComMid","CCant","CCpst","GenFacCran2","LC","LGN"]
 
 # %%
 image = sitk.ReadImage(image_path)
 # Read points
-manual_annotation = sf.read_slicer_fcsv(manual_annotation_path)
+#manual_annotation = sf.read_slicer_fcsv(manual_annotation_path)
+fiducial_annotation = sf.read_slicer_fcsv(str(uw_yoni_annotation_path))
 
 # Load the headframe
 headframe, headframe_faces = get_vertices_and_faces(headframe_path)
@@ -142,12 +143,12 @@ probe_mesh = load_newscale_trimesh(probe_model_file, move_down=0.5)
 
 # Get chemical shift from MRI image.
 # Defaults are standard UW scans- set params for anything else.
-chem_shift = compute_chemical_shift(image)
+chem_shift = compute_chemical_shift(image,ppm = 3.67)
 chem_shift_trans = chemical_shift_transform(chem_shift, readout="HF")
 # -
 
 # List targeted locations
-preferred_pts = {k: manual_annotation[k] for k in target_structures}
+preferred_pts = {k: fiducial_annotation[k] for k in target_structures}
 
 hmg_pts = rot.prepare_data_for_homogeneous_transform(
     np.array(tuple(preferred_pts.values()))
@@ -179,7 +180,7 @@ for ii,hole_id in enumerate(hole_dict.keys()):
     if hole_id<0:
         continue
     model_implant_targets[hole_id] = hole_dict[hole_id].centroid
-    
+
 
 # %%
 implant_model_trans = mr_sitk.load_sitk_transform(
@@ -240,6 +241,9 @@ implant_df = pd.DataFrame(
 df_joined = pd.concat((target_df, implant_df), ignore_index=True)
 df_joined.to_csv(transformed_targets_save_path, index=False)
 # %%
+implant_df
+
+# %%
 df = candidate_insertions(
     transformed_annotation,
     transformed_implant,
@@ -251,7 +255,7 @@ df[df.target=='AntComMid']
 
 
 # %%
-match_insertions = [38,35,39,34]# [37,17,48] # LGN,LC,ACT
+match_insertions = [8,9]# [37,17,48] # LGN,LC,ACT
 # match_insertions = [17,39,34] # GVII,CC,RN
 works_for_all = set(np.where(valid[match_insertions[0], :])[0])
 
@@ -265,8 +269,9 @@ works_for_all = [ii for ii in list(works_for_all) if ii not in match_insertions]
 
 df.iloc[np.concatenate([match_insertions, list(works_for_all)])]
 
-
 # %%
+df.to_csv(annotations_path/'possible_insertions_10_29_2024.csv')
+
 
 # %%
 def transform_matrix_from_angles_and_target(AP, ML, Target, degrees=True):
