@@ -48,25 +48,29 @@ from aind_mri_utils import reticle_calibrations as rc
 # Set file paths and mouse ID here
 
 # Calibration File with probe data
-mouse_id = "727354"
+mouse_id = "728537"
+retcile_used = "H"
 basepath = Path("/mnt/aind1-vast/scratch/")
+parallax_debug_dir = Path("/home/galen.lynch/Downloads/debug")
+
 calibration_dir = (
     basepath / "ephys/persist/data/probe_calibrations/CSVCalibrations/"
 )
 
 # Target file with transformed targets
-target_dir = basepath / f"ephys/persist/data/MRI/processed/{mouse_id}/"
-cal_file = calibration_dir / "calibration_info_np2_2024_08_05T14_34_00.xlsx"
+target_dir = basepath / f"ephys/persist/data/MRI/processed/{mouse_id}/UW"
 target_file = target_dir / f"{mouse_id}_TransformedTargets.csv"
 
 # Whether to fit the scale parameters as well. This is not recommended unless
 # you have a good reason to do so.  Does not guarantee that the error will be
 # lower
-fit_scale = False
+fit_scale = True
 
 # Whether to print the mean and maximum error for each probe and the predicted
 # probe coordinates for each reticle coordinate with error for that coordinate
 verbose = True
+
+reticle_offsets = {"H": np.array([0.076, 0.062, 0.311])}
 
 
 # %%
@@ -76,6 +80,19 @@ def _round_targets(target, probe_target):
         np.round(2000 * probe_target_and_overshoot) / 2
     )
     return target_rnd, probe_target_and_overshoot_rnd
+
+
+def pairs_from_parallax_points_csv(parallax_points_filename):
+    df = pd.read_csv(parallax_points_filename)
+    pairs = []
+    dims = ["x", "y", "z"]
+    reticle_colnames = [f"global_{dim}" for dim in dims]
+    manipulator_colnames = [f"local_{dim}" for dim in dims]
+    for i, row in df.iterrows():
+        manip_pt = row[manipulator_colnames].to_numpy().astype(np.float64)
+        ret_pt = row[reticle_colnames].to_numpy().astype(np.float64)
+        pairs.append((ret_pt, manip_pt))
+    return pairs
 
 
 # %%
@@ -118,8 +135,7 @@ print(target_df)
 # targets_and_overshoots_by_probe = {probe_id: (target_name, overshoot), ...}
 # overshoot in µm
 targets_and_overshoots_by_probe = {
-    46110: ("AntComMid", 500),
-    46100: ("GenFacCran2", 500),
+    45881: ("GPe_anterior", 700),
 }
 # Targets in bregma-relative coordinates not in the target file
 # manual_bregma_targets_by_probe = {probe_id: [x, y, z], ...}
@@ -128,14 +144,23 @@ manual_bregma_targets_by_probe = {
     # 46110: [0, 0, 0], # in mm!
 }
 
-
 # %%
-(
-    adjusted_pairs_by_probe,
-    global_offset,
-    global_rotation_degrees,
-    reticle_name,
-) = rc.read_reticle_calibration(cal_file)
+manips_used = list(
+    set(targets_and_overshoots_by_probe.keys()).union(
+        manual_bregma_targets_by_probe.keys()
+    )
+)
+adjusted_pairs_by_probe = dict()
+global_offset = reticle_offsets[retcile_used]
+global_roatation_degrees = 0
+reticle_name = retcile_used
+for manip in manips_used:
+    fname = parallax_debug_dir / f"points_SN{manip}.csv"
+    pairs = pairs_from_parallax_points_csv(fname)
+    reticle_pts, manip_pts = rc._apply_metadata_to_pair_lists(
+        pairs, 1 / 1000, global_roatation_degrees, global_offset, 1 / 1000
+    )
+    adjusted_pairs_by_probe[manip] = (reticle_pts, manip_pts)
 
 # %% [markdown]
 # ## Fit rotation parameters
@@ -186,6 +211,9 @@ for probe, (reticle_pts, probe_pts) in adjusted_pairs_by_probe.items():
         print(
             f"Probe {probe}: Mean error {errs.mean():.2f} µm, max error {errs.max():.2f} µm"
         )
+        print(f"rotation: {rotations[probe]}")
+        print(f"translation: {translations[probe]}")
+        print(f"scale: {scale}")
         original_reticle_pts = reticle_pts - global_offset
         for i in range(len(errs)):
             rounded_pred = np.round(predicted_probe_pts[i], decimals=2)
@@ -203,11 +231,12 @@ for probe, (reticle_pts, probe_pts) in adjusted_pairs_by_probe.items():
 # %%
 # Print the transformed targets in manipulator coordinates
 
+dims = ["ML (mm)", "AP (mm)", "DV (mm)"]
 for probe, (target_name, overshoot) in targets_and_overshoots_by_probe.items():
     if probe not in rotations:
         print(f"Probe {probe} not in calibration file")
         continue
-    target = target_df.loc[target_name].to_numpy()
+    target = target_df.loc[target_name, dims].to_numpy().astype(np.float64)
     overshoot_arr = np.array([0, 0, overshoot / 1000])
     if fit_scale:
         scale = scale_vecs[probe]
@@ -239,3 +268,5 @@ for probe, target in manual_bregma_targets_by_probe.items():
     print(
         f"Probe {probe}: Manual target {target_rnd} (mm) -> manipulator coord. {probe_target_rnd} (µm)"
     )
+
+# %%

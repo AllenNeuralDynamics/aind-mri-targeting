@@ -1,35 +1,32 @@
 # %%
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import SimpleITK as sitk
+import trimesh
+from aind_mri_utils import coordinate_systems as cs
+from aind_mri_utils import rotations as rot
+from aind_mri_utils.chemical_shift import (
+    chemical_shift_transform,
+    compute_chemical_shift,
+)
+from aind_mri_utils.file_io import simpleitk as mr_sitk
+from aind_mri_utils.file_io import slicer_files as sf
+from aind_mri_utils.file_io.obj_files import get_vertices_and_faces
+from aind_mri_utils.meshes import load_newscale_trimesh
+from aind_mri_utils.planning import find_other_compatible_insertions
+
 from aind_mri_utils.planning import (
     candidate_insertions,
     compatible_insertion_pairs,
     get_implant_targets,
     make_scene_for_insertion,
 )
-from aind_mri_utils.file_io import slicer_files as sf
-
-from pathlib import Path
-import trimesh
-import SimpleITK as sitk
-from aind_mri_utils import rotations as rot
-from aind_mri_utils.file_io import simpleitk as mr_sitk
-from aind_mri_utils.file_io.obj_files import get_vertices_and_faces
-from aind_mri_utils import coordinate_systems as cs
-from aind_mri_utils.meshes import load_newscale_trimesh
-from aind_mri_utils.chemical_shift import (
-    compute_chemical_shift,
-    chemical_shift_transform,
-)
-
-from aind_mri_utils.planning import (
-    find_other_compatible_insertions,
-)
-
-import numpy as np
-import pandas as pd
 
 # %%
-mouse = "750106"
-whoami = "yoni"
+mouse = "750105"
+whoami = "galen"
 if whoami == "galen":
     base_dir = Path("/mnt/aind1-vast/scratch/")
     base_save_dir = Path("/home/galen.lynch/")
@@ -45,7 +42,7 @@ headframe_model_dir = base_dir / "ephys/persist/data/MRI/HeadframeModels/"
 probe_model_file = (
     headframe_model_dir / "dovetailtweezer_oneShank_centered_corrected.obj"
 )  # "modified_probe_holder.obj"
-annotations_path = base_dir / "ephys/persist/data/MRI/processed/{}/UW".format(
+annotations_path = base_dir / "ephys/persist/data/MRI/processed/{}".format(
     mouse
 )
 
@@ -67,7 +64,7 @@ brain_mask_path = str(
     annotations_path / ("{}_auto_skull_strip.nrrd".format(mouse))
 )
 manual_annotation_path = str(
-    annotations_path / (f"fiducials-{mouse}-transformed.fcsv")#(f"{mouse}_ManualAnnotations.fcsv")
+    annotations_path / (f"{mouse}_ManualAnnotations.fcsv")
 )
 cone_path = (
     base_dir
@@ -95,7 +92,7 @@ measured_hole_centers = (
 # manual_hole_centers_file = annotations_path / 'hole_centers.mrk.json'
 
 transformed_targets_save_path = annotations_path / (
-    f"{mouse}_TransformedTargets_coms.csv"
+    f"{mouse}_TransformedTargets.csv"
 )
 test_probe_translation_save_path = str(
     base_save_dir / "test_probe_translation.h5"
@@ -103,7 +100,7 @@ test_probe_translation_save_path = str(
 transform_filename = str(annotations_path / (mouse + "_com_plane.h5"))
 
 # %%
-target_structures = ["CCant", "CCpst", "AntComMid", "GenFacCran2",'LGN']
+target_structures = None  # ["CCant", "CCpst", "AntComMid", "GenFacCran2"]
 
 # %%
 image = sitk.ReadImage(image_path)
@@ -128,11 +125,13 @@ probe_mesh = load_newscale_trimesh(probe_model_file, move_down=0.5)
 
 # Get chemical shift from MRI image.
 # Defaults are standard UW scans- set params for anything else.
-chem_shift = compute_chemical_shift(image,ppm = 3.67)
+chem_shift = compute_chemical_shift(image)
 chem_shift_trans = chemical_shift_transform(chem_shift, readout="HF")
 # -
 
 # List targeted locations
+if target_structures is None:
+    target_structures = list(manual_annotation.keys())
 preferred_pts = {k: manual_annotation[k] for k in target_structures}
 
 hmg_pts = rot.prepare_data_for_homogeneous_transform(
@@ -200,21 +199,13 @@ df = candidate_insertions(
     target_names,
     implant_names,
 )
-
-df.to_csv(annotations_path/f'{mouse}_candidate_insertions_com.csv')
 compat_matrix = compatible_insertion_pairs(df)
 
 
 # %%
-df[df.target== 'LGN']
-
-# %%
-df[df.target=='CCant']
-
-# %%
 seed_insertions = []
-bad_holes = {0, 1, 2, 7, 9, 10}
-bad_mask = np.isin(df.hole.to_numpy(), list(bad_holes))
+bad_holes = [0, 1, 2, 7, 9, 10]
+bad_mask = np.isin(df.hole.to_numpy(), bad_holes)
 target_mask = df.target.to_numpy() == "CCant"
 keep_mask = np.logical_and(np.logical_not(bad_mask), target_mask)
 consider_ndxs = np.nonzero(keep_mask)[0]
