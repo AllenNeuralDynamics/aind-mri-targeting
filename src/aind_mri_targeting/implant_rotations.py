@@ -1,14 +1,13 @@
 """Module for implant rotations."""
 
 import re
-
-import trimesh
-import SimpleITK as sitk
-
 from pathlib import Path
+
+import SimpleITK as sitk
+import trimesh
+from aind_mri_utils import coordinate_systems as cs
 from aind_mri_utils.implant import fit_implant_to_mri, make_hole_seg_dict
 from aind_mri_utils.rotations import combine_angles, rotation_matrix_to_sitk
-from aind_mri_utils import coordinate_systems as cs
 
 
 def find_hole_files(directory_or_files, hole_file_pattern=r"Hole(\d+).obj"):

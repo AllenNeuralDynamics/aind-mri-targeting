@@ -3,6 +3,8 @@ Routines for finding the centers of mass and rotations of headframes
 """
 
 import os
+from pathlib import Path
+from typing import Dict, List, Tuple
 
 import nrrd
 import SimpleITK as sitk
@@ -11,8 +13,6 @@ from aind_mri_utils import rotations as mrrot
 from aind_mri_utils.file_io import slicer_files as sf
 
 from . import util as mrt_ut
-from pathlib import Path
-from typing import Dict, Tuple, List
 
 
 def try_open_sitk(path: str) -> sitk.Image:
