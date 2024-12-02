@@ -193,12 +193,6 @@ def fit_implant_to_mri_from_files(
     >>> fit_implant_to_mri_from_files("/path/to/file", "/path/to/directory")
     {'implant': <trimesh.Trimesh>, 1: <numpy.ndarray>, 2: <numpy.ndarray>}
     """
-    implant_annotations = sitk.ReadImage(str(implant_annotations_file))
-    hole_seg_dict = make_hole_seg_dict(implant_annotations)
-    hole_mesh_dict = find_load_meshes(hole_directory, **find_load_mesh_kws)
-
-    T = fit_implant_to_mri(hole_seg_dict, hole_mesh_dict, **fit_kws)
-
     if save_name is not None:
         save_path = Path(save_name)
         if save_path.is_dir():
@@ -213,7 +207,16 @@ def fit_implant_to_mri_from_files(
             raise ValueError("save_name must be a directory or an h5 file.")
         if not force and Path(save_file_path).is_file():
             raise FileExistsError(f"{save_file_path} already exists.")
+    else:
+        save_file_path = None
 
+    implant_annotations = sitk.ReadImage(str(implant_annotations_file))
+    hole_seg_dict = make_hole_seg_dict(implant_annotations)
+    hole_mesh_dict = find_load_meshes(hole_directory, **find_load_mesh_kws)
+
+    T = fit_implant_to_mri(hole_seg_dict, hole_mesh_dict, **fit_kws)
+
+    if save_file_path is not None:
         rotation_matrix = combine_angles(*T[:3])
         translation = T[3:]
         transform = rotation_matrix_to_sitk(
