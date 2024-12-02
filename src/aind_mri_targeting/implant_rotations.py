@@ -63,7 +63,7 @@ def find_hole_files(directory_or_files, hole_file_pattern=r"Hole(\d+).obj"):
     for file in files:
         if not isinstance(file, Path):
             file = Path(file)
-        match = re.match(hole_file_pattern, file.stem)
+        match = re.match(hole_file_pattern, file.name)
         if match:
             hole_files[int(match.group(1))] = file
 
@@ -197,7 +197,7 @@ def fit_implant_to_mri_from_files(
     hole_seg_dict = make_hole_seg_dict(implant_annotations)
     hole_mesh_dict = find_load_meshes(hole_directory, **find_load_mesh_kws)
 
-    T = fit_implant_to_mri(hole_mesh_dict, hole_seg_dict, **fit_kws)
+    T = fit_implant_to_mri(hole_seg_dict, hole_mesh_dict, **fit_kws)
 
     if save_name is not None:
         save_path = Path(save_name)

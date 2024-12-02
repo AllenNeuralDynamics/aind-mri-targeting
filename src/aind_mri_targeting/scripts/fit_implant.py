@@ -12,9 +12,7 @@ def parse_args():
         description="Calculate the volume transformation matrix of an implant"
     )
     parser.add_argument("segmentation", help="path to the segmentation file")
-    parser.add_argument(
-        "hole_dict", help="directory containing the hole files"
-    )
+    parser.add_argument("hole_dir", help="directory containing the hole files")
     parser.add_argument("output", help="path to the output file")
     parser.add_argument(
         "-F",
@@ -38,7 +36,7 @@ def main():
     args = parse_args()
     fit_implant_to_mri_from_files(
         args.segmentation,
-        args.hole_dict,
+        args.hole_dir,
         save_name=args.output,
         save_inverse=not args.forward,
         force=args.force,
