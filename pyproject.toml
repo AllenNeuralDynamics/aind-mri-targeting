@@ -18,6 +18,7 @@ dynamic = ["version"]
 
 dependencies = [
   'aind_mri_utils >=0.0.56, <2',
+  'aind_registration_utils >=0.0.1, <2',
   'SimpleITK >=2, <3',
   'pynrrd >=1, <2',
   'numpy >=1.20, <2',
