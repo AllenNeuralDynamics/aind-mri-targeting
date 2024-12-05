@@ -15,11 +15,10 @@ from aind_mri_utils.file_io import simpleitk as mr_sitk
 from aind_mri_utils.file_io import slicer_files as sf
 from aind_mri_utils.file_io.obj_files import get_vertices_and_faces
 from aind_mri_utils.meshes import load_newscale_trimesh
-from aind_mri_utils.planning import find_other_compatible_insertions
-
 from aind_mri_utils.planning import (
     candidate_insertions,
     compatible_insertion_pairs,
+    find_other_compatible_insertions,
     get_implant_targets,
     make_scene_for_insertion,
 )

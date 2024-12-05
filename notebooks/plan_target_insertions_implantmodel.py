@@ -61,7 +61,7 @@ hole_folder = headframe_model_dir / "HoleOBJs"
 implant_model_path = headframe_model_dir / "0283-300-04.obj"
 implant_transform = (
     annotations_path
-    / f"{mouse}_implant_annotations_to_lps_implant_model_with_brain_better_normalization.h5"
+    / f"{mouse}_implant_annotations_to_lps_implant_model_with_brain_better_normalization.h5"  # noqa E501
 )
 
 headframe_path = headframe_model_dir / "TenRunHeadframe.obj"
@@ -86,7 +86,7 @@ manual_annotation_path = str(
 )
 cone_path = (
     base_dir
-    / "ephys/persist/Software/PinpointBuilds/WavefrontFiles/Cone_0160-200-53.obj"
+    / "ephys/persist/Software/PinpointBuilds/WavefrontFiles/Cone_0160-200-53.obj"  # noqa E501
 )
 
 uw_yoni_annotation_path = (
@@ -336,7 +336,30 @@ compat_matrix = compatible_insertion_pairs(df)
 # %%
 df[df.target == "GPe_anterior"]
 # %%
-seed_insertions = [74, 76, 77, 78, 79, 80, 82, 83, 88, 90, 91, 92, 93, 96, 97, 104, 105, 106, 107, 108, 110, 111]  # [37,17,48] # LGN,LC,ACT
+seed_insertions = [
+    74,
+    76,
+    77,
+    78,
+    79,
+    80,
+    82,
+    83,
+    88,
+    90,
+    91,
+    92,
+    93,
+    96,
+    97,
+    104,
+    105,
+    106,
+    107,
+    108,
+    110,
+    111,
+]  # [37,17,48] # LGN,LC,ACT
 bad_holes = [0, 1, 2, 3]
 good_holes_mask = np.logical_not(np.isin(df.hole.to_numpy(), bad_holes))
 target_mask = np.logical_not(
@@ -364,12 +387,12 @@ for i, row in insertion_df.iterrows():
     data.append(
         {
             "Target": row["target"],
-            #"Annotation": None,
-            #"Headframe Registration": None,
-            #"Coordinate Sys": None,
-            #"CCF ML (um)": None,
-            #"CCF AP (um)": None,
-            #"CCF DV (um)": None,
+            # "Annotation": None,
+            # "Headframe Registration": None,
+            # "Coordinate Sys": None,
+            # "CCF ML (um)": None,
+            # "CCF AP (um)": None,
+            # "CCF DV (um)": None,
             "Target ML (mm)": ml,
             "Target AP (mm)": ap,
             "Target DV (mm)": dv,
@@ -549,13 +572,3 @@ S.show(viewer="gl")
 # %%
 angle_ranges = [np.arange(0, 360, 45)] * len(seed_insertions)
 angle_ranges
-
-# %% [raw]
-# reload(aind_mri_utils)
-
-# %%
-import aind_mri_utils
-
-# %%
-
-# %%
