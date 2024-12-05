@@ -133,7 +133,7 @@ def find_load_meshes(
     >>> find_load_meshes("/path/to/directory")
     {1: <trimesh.Trimesh>, 2: <trimesh.Trimesh>}
 
-    >>> find_load_meshes("/path/to/directory", source_cs="LPS", target_cs="ASR")
+    >>> find_load_meshes("/path/to/dir", source_cs="LPS", target_cs="ASR")
     {1: <trimesh.Trimesh>, 2: <trimesh.Trimesh>}
     """
     hole_files = find_hole_files(hole_directory, **hole_file_kws)
