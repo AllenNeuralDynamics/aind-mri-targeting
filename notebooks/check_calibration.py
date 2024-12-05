@@ -7,13 +7,12 @@ import itertools as itr
 import numpy as np
 from aind_mri_utils import parallax_calibration as pc
 from aind_mri_utils import reticle_calibrations as rc
-from aind_mri_utils import rotations as rot
 from matplotlib import pyplot as plt
 
 importlib.reload(rc)
 # %%
 # Define the calibration file and probe
-cal_file = "/mnt/aind1-vast/scratch/ephys/persist/data/probe_calibrations/CSVCalibrations/calibration_info_np2_2024_08_01T11_23_00.xlsx"
+cal_file = "/mnt/aind1-vast/scratch/ephys/persist/data/probe_calibrations/CSVCalibrations/calibration_info_np2_2024_08_01T11_23_00.xlsx"  # noqa E501
 probe = 46116
 
 

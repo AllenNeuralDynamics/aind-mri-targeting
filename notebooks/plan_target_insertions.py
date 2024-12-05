@@ -20,10 +20,8 @@ from aind_mri_utils.file_io import simpleitk as mr_sitk
 from aind_mri_utils.file_io import slicer_files as sf
 from aind_mri_utils.file_io.obj_files import get_vertices_and_faces
 from aind_mri_utils.meshes import load_newscale_trimesh
-from aind_mri_utils.optimization import (
-    append_ones_column,
-    get_headframe_hole_lines,
-)
+from aind_mri_utils.optimization import get_headframe_hole_lines
+from matplotlib import cm
 from scipy.spatial.transform import Rotation
 
 # %%
@@ -71,7 +69,7 @@ manual_annotation_path = str(
 )
 cone_path = (
     base_dir
-    / "ephys/persist/Software/PinpointBuilds/WavefrontFiles/Cone_0160-200-53.obj"
+    / "ephys/persist/Software/PinpointBuilds/WavefrontFiles/Cone_0160-200-53.obj"  # noqa E501
 )
 
 uw_yoni_annotation_path = (

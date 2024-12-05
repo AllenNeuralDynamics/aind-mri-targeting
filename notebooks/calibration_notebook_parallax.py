@@ -32,8 +32,10 @@
 # targets that are not in the target file, you can specify them manually.
 # 7. Run the next cell to fit the rotation parameters. If `verbose` is set to
 # `True`, the mean and maximum error for each probe will be printed, as well as
-# the predicted probe coordinates for each reticle coordinate with error for that coordinate.
-# 8. Run the last cell to get the transformed targets in manipulator coordinates
+# the predicted probe coordinates for each reticle coordinate with error for
+# that coordinate.
+# 8. Run the last cell to get the transformed targets in manipulator
+# coordinates
 
 # %%
 from pathlib import Path
@@ -114,22 +116,16 @@ print(target_df)
 #     ...
 # }
 # ```
-# Where each `probe_id` is the ID of a probe in the calibration file, `target_name`
-# is the name of the target in the target file, and `overshoot` is the overshoot
-# in µm.
+# Where each `probe_id` is the ID of a probe in the calibration file,
+# `target_name` is the name of the target in the target file, and `overshoot`
+# is the overshoot in µm.
 #
 # If you have targets that are not in the target file, you can specify them
 # manually. The format should be
 #
-# ```python
-# manual_bregma_targets_by_probe = {
-#     probe_id: [x, y, z],
-#     ...
-# }
-# ```
-# where `[x, y, z]` are the coordinates in mm.
-# %%
-# Set experiment configuration here
+# ```python manual_bregma_targets_by_probe = { probe_id: [x, y, z], ...  } ```
+# where `[x, y, z]` are the coordinates in mm.  %% Set experiment configuration
+# here
 
 # Names of targets in the target file and overshoots
 # targets_and_overshoots_by_probe = {probe_id: (target_name, overshoot), ...}
@@ -209,7 +205,8 @@ for probe, (reticle_pts, probe_pts) in adjusted_pairs_by_probe.items():
     errs = 1000 * np.linalg.norm(predicted_probe_pts - probe_pts, axis=1)
     if verbose:
         print(
-            f"Probe {probe}: Mean error {errs.mean():.2f} µm, max error {errs.max():.2f} µm"
+            f"Probe {probe}: Mean error {errs.mean():.2f} µm, max error "
+            f"{errs.max():.2f} µm"
         )
         print(f"rotation: {rotations[probe]}")
         print(f"translation: {translations[probe]}")
@@ -218,7 +215,8 @@ for probe, (reticle_pts, probe_pts) in adjusted_pairs_by_probe.items():
         for i in range(len(errs)):
             rounded_pred = np.round(predicted_probe_pts[i], decimals=2)
             print(
-                f"\tReticle {original_reticle_pts[i]} -> Probe {probe_pts[i]}: predicted {rounded_pred} error {errs[i]:.2f} µm"
+                f"\tReticle {original_reticle_pts[i]} -> Probe {probe_pts[i]}: "  # noqa E501
+                f"predicted {rounded_pred} error {errs[i]:.2f} µm"
             )
 
 # %% [markdown]
@@ -250,7 +248,9 @@ for probe, (target_name, overshoot) in targets_and_overshoots_by_probe.items():
         target, probe_target_and_overshoot
     )
     print(
-        f"Probe {probe}: Target {target_name} {target_rnd} (mm) -> manipulator coord. {probe_target_and_overshoot_rnd} (µm) w/ {overshoot} µm overshoot"
+        f"Probe {probe}: Target {target_name} {target_rnd} (mm) -> "
+        f"manipulator coord. {probe_target_and_overshoot_rnd} (µm) "
+        f"w/ {overshoot} µm overshoot"
     )
 for probe, target in manual_bregma_targets_by_probe.items():
     if probe not in rotations:
@@ -266,7 +266,8 @@ for probe, target in manual_bregma_targets_by_probe.items():
     )
     target_rnd, probe_target_rnd = _round_targets(target_arr, probe_target)
     print(
-        f"Probe {probe}: Manual target {target_rnd} (mm) -> manipulator coord. {probe_target_rnd} (µm)"
+        f"Probe {probe}: Manual target {target_rnd} (mm) -> manipulator "
+        f"coord. {probe_target_rnd} (µm)"
     )
 
 # %%
