@@ -40,6 +40,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import os
 
 # %matplotlib inline
 from aind_mri_utils import reticle_calibrations as rc
@@ -48,17 +49,17 @@ from aind_mri_utils import reticle_calibrations as rc
 # Set file paths and mouse ID here
 
 # Calibration File with probe data
-mouse_id = "728537"
-retcile_used = "H"
-basepath = Path("/mnt/aind1-vast/scratch/")
-parallax_debug_dir = Path("/home/galen.lynch/Downloads/debug")
-
-calibration_dir = (
-    basepath / "ephys/persist/data/probe_calibrations/CSVCalibrations/"
-)
+mouse_id = "760332"
+calib_date = "20241203"
+reticle_used = "H"
+basepath = Path(r"Z:")
+parallax_debug_dir = Path(r"C:\Users\svc_aind_ephys\Documents\Code\parallax\debug")
+calib_folder = [f for f in os.listdir(parallax_debug_dir) if f.startswith("log_" + str(calib_date))]
+calib_dir = Path(r"C:\Users\svc_aind_ephys\Documents\Code\parallax\debug\\" + str(calib_folder[-1]))
 
 # Target file with transformed targets
-target_dir = basepath / f"ephys/persist/data/MRI/processed/{mouse_id}/UW"
+target_dir = basepath / f"ephys/persist/data/MRI/processed/{mouse_id}"
+#target_file = target_dir / f"{mouse_id}_TransformedTargets.csv"
 target_file = target_dir / f"{mouse_id}_TransformedTargets.csv"
 
 # Whether to fit the scale parameters as well. This is not recommended unless
@@ -135,7 +136,9 @@ print(target_df)
 # targets_and_overshoots_by_probe = {probe_id: (target_name, overshoot), ...}
 # overshoot in µm
 targets_and_overshoots_by_probe = {
-    45881: ("GPe_anterior", 700),
+    50209: ("CCpst", 0),
+    50205: ("GenFacCran2", 0),
+    50197: ("GenFacCran2", 0)
 }
 # Targets in bregma-relative coordinates not in the target file
 # manual_bregma_targets_by_probe = {probe_id: [x, y, z], ...}
@@ -151,14 +154,15 @@ manips_used = list(
     )
 )
 adjusted_pairs_by_probe = dict()
-global_offset = reticle_offsets[retcile_used]
-global_roatation_degrees = 0
-reticle_name = retcile_used
+global_offset = reticle_offsets[reticle_used]
+global_rotation_degrees = 0
+reticle_name = reticle_used
 for manip in manips_used:
-    fname = parallax_debug_dir / f"points_SN{manip}.csv"
+    manip_f = [f for f in os.listdir(calib_dir) if f.startswith("points_SN" + str(manip))]
+    fname = calib_dir / f"{manip_f[-1]}"
     pairs = pairs_from_parallax_points_csv(fname)
     reticle_pts, manip_pts = rc._apply_metadata_to_pair_lists(
-        pairs, 1 / 1000, global_roatation_degrees, global_offset, 1 / 1000
+        pairs, 1 / 1000, global_rotation_degrees, global_offset, 1 / 1000
     )
     adjusted_pairs_by_probe[manip] = (reticle_pts, manip_pts)
 
@@ -178,6 +182,7 @@ for manip in manips_used:
 # Calculate the rotation parameters and display errors if verbose is set to
 # True
 
+print("Calibration Directory: " + str(calib_dir))
 rotations = dict()
 translations = dict()
 if fit_scale:
