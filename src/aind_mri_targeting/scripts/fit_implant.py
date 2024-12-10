@@ -40,7 +40,7 @@ def main():
         save_name=args.output,
         save_inverse=not args.forward,
         force=args.force,
-        mouse_id=args.mouse,
+        mouse_name=args.mouse,
     )
     return 0
 
