@@ -7,7 +7,7 @@ import SimpleITK as sitk
 import trimesh
 from aind_mri_utils import coordinate_systems as cs
 from aind_mri_utils.implant import fit_implant_to_mri, make_hole_seg_dict
-from aind_mri_utils.rotations import combine_angles, rotation_matrix_to_sitk
+from aind_mri_utils.rotations import rotation_matrix_to_sitk
 
 
 def find_hole_files(directory_or_files, hole_file_pattern=r"Hole(\d+).obj"):
@@ -152,7 +152,7 @@ def fit_implant_to_mri_from_files(
     save_name=None,
     save_inverse=True,
     force=False,
-    mouse_id=None,
+    mouse_name=None,
     find_load_mesh_kws={},
     fit_kws={},
 ):
@@ -173,7 +173,7 @@ def fit_implant_to_mri_from_files(
     force : bool, optional
         Whether to overwrite the save file if it already exists. Default is
         False.
-    mouse_id : int or str, optional
+    mouse_name : int or str, optional
         The mouse ID. Default is None.
     find_load_mesh_kws : dict, optional
         Additional keyword arguments to pass to `find_load_meshes`. Default is
@@ -196,8 +196,8 @@ def fit_implant_to_mri_from_files(
     if save_name is not None:
         save_path = Path(save_name)
         if save_path.is_dir():
-            if mouse_id is not None:
-                file_name = f"{mouse_id}_implant_fit.h5"
+            if mouse_name is not None:
+                file_name = f"{mouse_name}_implant_fit.h5"
             else:
                 file_name = "implant_fit.h5"
             save_file_path = save_path / file_name
@@ -214,17 +214,16 @@ def fit_implant_to_mri_from_files(
     hole_seg_dict = make_hole_seg_dict(implant_annotations)
     hole_mesh_dict = find_load_meshes(hole_directory, **find_load_mesh_kws)
 
-    T = fit_implant_to_mri(hole_seg_dict, hole_mesh_dict, **fit_kws)
+    rotation_matrix, translation = fit_implant_to_mri(
+        hole_seg_dict, hole_mesh_dict, **fit_kws
+    )
 
     if save_file_path is not None:
-        rotation_matrix = combine_angles(*T[:3])
-        translation = T[3:]
         transform = rotation_matrix_to_sitk(
             rotation=rotation_matrix, translation=translation
         )
         if save_inverse:
             transform = transform.GetInverse()
-
         sitk.WriteTransform(transform, str(save_file_path))
 
-    return T
+    return rotation_matrix, translation

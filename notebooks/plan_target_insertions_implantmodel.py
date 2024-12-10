@@ -15,7 +15,7 @@ from aind_mri_utils.chemical_shift import (
     chemical_shift_transform,
     compute_chemical_shift,
 )
-from aind_mri_utils.file_io import simpleitk as mr_sitk
+from aind_mri_utils.file_io.simpleitk import load_sitk_transform
 from aind_mri_utils.file_io import slicer_files as sf
 from aind_mri_utils.file_io.obj_files import get_vertices_and_faces
 from aind_mri_utils.meshes import (
@@ -35,8 +35,8 @@ from aind_mri_utils.reticle_calibrations import (
 )
 
 # %%
-mouse = "728537"
-vaseline_ppm = 3.67  # (3.7 + 4.1) / 2 for previouse
+mouse = "760333"
+vaseline_ppm = 3.67  # (3.7 + 4.1) / 2 for previous
 whoami = "galen"
 if whoami == "galen":
     base_dir = Path("/mnt/aind1-vast/scratch/")
@@ -53,16 +53,13 @@ headframe_model_dir = base_dir / "ephys/persist/data/MRI/HeadframeModels/"
 probe_model_file = (
     headframe_model_dir / "dovetailtweezer_oneShank_centered_corrected.obj"
 )  # "modified_probe_holder.obj"
-annotations_path = base_dir / "ephys/persist/data/MRI/processed/{}/UW".format(
+annotations_path = base_dir / "ephys/persist/data/MRI/processed/{}".format(
     mouse
 )
 
 hole_folder = headframe_model_dir / "HoleOBJs"
 implant_model_path = headframe_model_dir / "0283-300-04.obj"
-implant_transform = (
-    annotations_path
-    / f"{mouse}_implant_annotations_to_lps_implant_model_with_brain_better_normalization.h5"  # noqa E501
-)
+implant_transform = annotations_path / f"{mouse}_implant_fit.h5"  # noqa E501
 
 headframe_path = headframe_model_dir / "TenRunHeadframe.obj"
 holes_path = headframe_model_dir / "OneOff_HolesOnly.obj"
@@ -82,7 +79,7 @@ brain_mask_path = str(
     annotations_path / ("{}_auto_skull_strip.nrrd".format(mouse))
 )
 manual_annotation_path = str(
-    annotations_path / (f"{mouse}_ManualAnnotations.fcsv")
+    annotations_path / (f"{mouse}-targets-from-template.fcsv")
 )
 cone_path = (
     base_dir
@@ -100,9 +97,8 @@ newscale_file_name = headframe_path / "Centered_Newscale_2pt0.obj"
 calibration_dir = (
     base_dir / "ephys/persist/data/probe_calibrations/CSVCalibrations/"
 )
-measured_hole_centers = (
-    annotations_path / f"{mouse}_measured_hole_centers.xlsx"
-)
+measured_hole_centers = None
+# (  annotations_path / f"{mouse}_measured_hole_centers.xlsx"  )
 
 
 # manual_hole_centers_file = annotations_path / 'hole_centers.mrk.json'
@@ -135,9 +131,9 @@ implant_lps = cs.convert_coordinate_system(
 )  # Preserves shape!
 
 # Load the computed transform
-trans = mr_sitk.load_sitk_transform(
-    transform_filename, homogeneous=True, invert=True
-)[0]
+trans = load_sitk_transform(transform_filename, homogeneous=True, invert=True)[
+    0
+]
 
 cone = trimesh.load_mesh(cone_path)
 cone.vertices = cs.convert_coordinate_system(cone.vertices, "ASR", "LPS")
@@ -194,17 +190,19 @@ for ii, hole_id in enumerate(hole_dict.keys()):
 
 
 # %%
-implant_model_trans = mr_sitk.load_sitk_transform(
-    implant_transform, homogeneous=True, invert=False
-)[0].T
+# This is stored as inverse for the sake of slicer, and must be re-inverted
+# to be used in python
+implant_model_trans = load_sitk_transform(
+    implant_transform, homogeneous=True, invert=True
+)[0]
 
 
 # %%
-implant_names = [*model_implant_targets]
+implant_names = list(model_implant_targets.keys())
 model_targets = np.vstack(list(model_implant_targets.values()))
 implant_targets = (
     rot.prepare_data_for_homogeneous_transform(model_targets)
-    @ implant_model_trans
+    @ implant_model_trans.T
 )
 transformed_implant = rot.extract_data_for_homogeneous_transform(
     implant_targets @ trans.T
@@ -331,7 +329,7 @@ df = candidate_insertions(
     implant_names_sorted,
 )
 compat_matrix = compatible_insertion_pairs(df)
-
+df.to_csv(annotations_path / f"{mouse}_candidate_insertions.csv")
 
 # %%
 df[df.target == "GPe_anterior"]
