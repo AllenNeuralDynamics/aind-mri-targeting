@@ -256,18 +256,28 @@ def calculate_headframe_transforms(
         raise FileNotFoundError(f"File {lower_plane_path} not found")
     plane_pts = sf.markup_json_to_numpy(lower_plane_path)[0]
     _, seg_odict = nrrd.read(seg_path)
-    theta_angle, theta_coms, theta_coms_plane = (
-        hr.find_hf_rotation_from_seg_and_lowerplane(
-            img,
-            seg_img,
-            seg_odict,
-            plane_pts,
-            segment_format,
-            ignore_list=ignore_list,
-        )
+    (
+        R_angle,
+        transl_angle,
+        R_holes_only,
+        transl_holes_only,
+        R_all,
+        transl_all,
+    ) = hr.find_hf_rotation_from_seg_and_lowerplane(
+        img,
+        seg_img,
+        seg_odict,
+        plane_pts,
+        segment_format,
+        ignore_list=ignore_list,
     )
-    for fname, theta in zip(
-        save_paths, [theta_angle, theta_coms, theta_coms_plane]
+    for fname, (R, transl) in zip(
+        save_paths,
+        [
+            (R_angle, transl_angle),
+            (R_holes_only, transl_holes_only),
+            (R_all, transl_all),
+        ],
     ):
         affine = theta_to_sitk_affine(theta, inverse=volume_transforms)
         sitk.WriteTransform(affine, str(fname))
