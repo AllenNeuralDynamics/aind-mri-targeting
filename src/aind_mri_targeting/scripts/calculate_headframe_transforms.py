@@ -20,11 +20,11 @@ def parse_args():
         "-s", "--segment_format", default=None, help="segment name format"
     )
     parser.add_argument(
-        "-v",
-        "--volume-transform",
+        "-p",
+        "--point_transform",
         action="store_true",
-        default=True,
-        help="write transform for volume",
+        default=False,
+        help="write transform for points instead of volume",
     )
     parser.add_argument(
         "-f",
@@ -53,7 +53,7 @@ def main():
         mouse_name=args.mouse,
         segment_format=args.segment_format,
         force=args.force,
-        volume_transforms=args.volume_transform,
+        volume_transforms=not args.point_transform,
         ignore_list=args.ignore,
     )
     return 0
