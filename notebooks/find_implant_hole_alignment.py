@@ -48,5 +48,5 @@ fit_implant_to_mri_from_files(
     save_name=save_name,
     save_inverse=save_inverse,
     force=force,
-    mouse_id=mouse_id,
+    mouse_name=mouse_id,
 )

@@ -9,7 +9,6 @@ from typing import Dict, List, Tuple
 import nrrd
 import SimpleITK as sitk
 from aind_mri_utils import headframe_rotation as hr
-from aind_mri_utils import rotations as mrrot
 from aind_mri_utils.file_io import slicer_files as sf
 
 from . import util as mrt_ut
@@ -162,7 +161,7 @@ def headframe_centers_of_mass(
 
 
 def theta_to_sitk_affine(
-    theta: List[float], inverse: bool = False
+    rot_mat, translation, inverse: bool = False
 ) -> sitk.AffineTransform:
     """
     Convert a set of theta parameters to a SimpleITK affine transformation.
@@ -182,10 +181,8 @@ def theta_to_sitk_affine(
         The SimpleITK affine transformation.
 
     """
-    rotmat = mrrot.combine_angles(*theta[:3])
-    translation = theta[3:]
     affine = sitk.AffineTransform(3)
-    affine.SetMatrix(rotmat.flatten())
+    affine.SetMatrix(rot_mat.flatten())
     affine.SetTranslation(translation.tolist())
     if inverse:
         affine = affine.GetInverse()
@@ -279,6 +276,6 @@ def calculate_headframe_transforms(
             (R_all, transl_all),
         ],
     ):
-        affine = theta_to_sitk_affine(theta, inverse=volume_transforms)
+        affine = theta_to_sitk_affine(R, transl, inverse=volume_transforms)
         sitk.WriteTransform(affine, str(fname))
     return
