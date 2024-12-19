@@ -1,19 +1,19 @@
 # %%
 from pathlib import Path
 
-from aind_mri_targeting.headframe_rotations import headframes_centers_of_mass
+from aind_mri_targeting.headframe_rotations import headframe_centers_of_mass
 
 # %%
 # Input files
-basepath = Path("/path/to/data")
-mri_path = basepath / "mri.nii.gz"
-seg_path = basepath / "segmentation.seg.nrrd"
+basepath = Path(r'Y:\ephys\persist\data\MRI\processed\750108\UW_2024_12_17') #Path("/path/to/data")
+mri_path = basepath / '750108_100.nii.gz'#"mri.nii.gz"
+seg_path = basepath / '750108_HeadframeHoles.seg.nrrd'#"segmentation.seg.nrrd"
 
 # Output directory
-output_dir = "/path/to/output"
+output_dir = basepath#"/path/to/output"
 
 # Optional mouse ID
-mouse_id = None
+mouse_id = 750108
 
 # Whether to ovewrite:
 force = False
@@ -25,12 +25,14 @@ segment_format = None
 
 ignore_list = []  # list of segment names to ignore
 # %%
-headframes_centers_of_mass(
+headframe_centers_of_mass(
     mri_path,
     seg_path,
     output_dir,
     mouse_id=mouse_id,
     segment_format=segment_format,
-    force=force,
+    force=True,
     ignore_list=ignore_list,
 )
+
+# %%

@@ -201,7 +201,7 @@ def fit_implant_to_mri_from_files(
             else:
                 file_name = "implant_fit.h5"
             save_file_path = save_path / file_name
-        elif save_path.suffix == "h5":
+        elif (save_path.suffix == ".h5") or (save_path.suffix == 'h5'):
             save_file_path = save_path
         else:
             raise ValueError("save_name must be a directory or an h5 file.")

@@ -11,6 +11,7 @@
 #     language: python
 #     name: python3
 # ---
+
 # %%
 from pathlib import Path
 
@@ -18,8 +19,8 @@ from aind_mri_targeting.implant_rotations import fit_implant_to_mri_from_files
 
 # %%
 # Paths
-mouse_id = 750105
-whoami = "galen"
+mouse_id = 750108
+whoami = "yoni"
 if whoami == "galen":
     scratchdir = Path("/mnt/aind1-vast/scratch/")
     base_save_dir = Path("/home/galen.lynch/")
@@ -27,7 +28,7 @@ elif whoami == "yoni":
     scratchdir = Path(r"Y:")
 mri_folder = scratchdir / "ephys/persist/data/MRI"
 processed_folder = mri_folder / "processed"
-mouse_folder = processed_folder / str(mouse_id)
+mouse_folder = processed_folder / str(mouse_id) / 'UW_2024_12_17'
 
 # required files
 implant_annotations_file = mouse_folder / f"{mouse_id}_ImplantHoles.seg.nrrd"
@@ -50,3 +51,8 @@ fit_implant_to_mri_from_files(
     force=force,
     mouse_id=mouse_id,
 )
+
+# %%
+Path(save_name).suffix
+
+# %%

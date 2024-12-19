@@ -1,11 +1,12 @@
+# %%
 from aind_mri_targeting import headframe_rotations as hr
 
 # %%
 # File paths constant across mice
-mri_path = "/path/to/mri.nii.gz"
-seg_path = "/path/to/segmentation.seg.nrrd"
-lower_plane_file = "/path/to/lower_plane.mrk.json"
-output_path = "/path/to/output"  # If None, will write in cwd
+mri_path =r'Y:\ephys\persist\data\MRI\processed\750108\UW_2024_12_17\750108_100.nii.gz'#"/path/to/mri.nii.gz"
+seg_path = r'Y:\ephys\persist\data\MRI\processed\750108\UW_2024_12_17\750108_HeadframeHoles.seg.nrrd'#"/path/to/segmentation.seg.nrrd"
+lower_plane_file = r'Y:\ephys\persist\data\MRI\processed\750108\UW_2024_12_17\750108_LowerPlane.mrk.json'#"/path/to/lower_plane.mrk.json"
+output_path = r'Y:\ephys\persist\data\MRI\processed\750108\UW_2024_12_17'#"/path/to/output"  # If None, will write in cwd
 
 # Optional
 mouse = None  # or string of mouse name
@@ -26,3 +27,5 @@ hr.calculate_headframe_transforms(
     volume_transforms=volume_transforms,
     ignore_list=ignore_list,
 )
+
+# %%
