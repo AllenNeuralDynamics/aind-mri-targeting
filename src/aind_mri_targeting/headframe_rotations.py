@@ -137,7 +137,7 @@ def headframe_centers_of_mass(
         filenames = [
             f for orient in orient_names for f in save_names[orient].values()
         ]
-        mrt_ut.err_if_file_exists(filenames)
+        mrt_ut.err_if_files_exist(filenames)
 
     img = try_open_sitk(mri_path)
     seg_img = try_open_sitk(segmentation_path)
@@ -278,4 +278,4 @@ def calculate_headframe_transforms(
     ):
         affine = theta_to_sitk_affine(R, transl, inverse=volume_transforms)
         sitk.WriteTransform(affine, str(fname))
-    return
+    return 
