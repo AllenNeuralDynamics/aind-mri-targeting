@@ -35,7 +35,7 @@ from aind_mri_utils.reticle_calibrations import (
 )
 
 # %%
-mouse = "760335"
+mouse = "765860"
 vaseline_ppm = 3.67  # (3.7 + 4.1) / 2 for previous
 whoami = "yoni"
 if whoami == "galen":
@@ -53,7 +53,7 @@ headframe_model_dir = base_dir / "ephys/persist/data/MRI/HeadframeModels/"
 probe_model_file = (
     headframe_model_dir / "dovetailtweezer_oneShank_centered_corrected.obj"
 )  # "modified_probe_holder.obj"
-annotations_path = base_dir / "ephys/persist/data/MRI/processed/{}".format(
+annotations_path = base_dir / "ephys/persist/data/MRI/processed/{}/UW_2025".format(
     mouse
 )
 

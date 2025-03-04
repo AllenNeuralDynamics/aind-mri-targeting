@@ -7,7 +7,7 @@
 #       format_version: '1.3'
 #       jupytext_version: 1.16.3
 #   kernelspec:
-#     display_name: Python 3.9.12 ('base')
+#     display_name: Python 3 (ipykernel)
 #     language: python
 #     name: python3
 # ---
@@ -109,20 +109,20 @@ print(target_df)
 # ```python manual_bregma_targets_by_probe = { probe_id: [x, y, z], ...  } ```
 # where `[x, y, z]` are the coordinates in mm.  %% Set experiment configuration
 # here
-
+#
 # Names of targets in the target file and overshoots
 # targets_and_overshoots_by_probe = {probe_id: (target_name, overshoot), ...}
 # overshoot in µm
-targets_and_overshoots_by_probe = {
-    46110: ("AntComMid", 500),
-    46100: ("GenFacCran2", 500),
-}
+# targets_and_overshoots_by_probe = {
+#     46110: ("AntComMid", 500),
+#     46100: ("GenFacCran2", 500),
+# }
 # Targets in bregma-relative coordinates not in the target file
 # manual_bregma_targets_by_probe = {probe_id: [x, y, z], ...}
 # x y z in mm
-manual_bregma_targets_by_probe = {
-    # 46110: [0, 0, 0], # in mm!
-}
+# manual_bregma_targets_by_probe = {
+#     # 46110: [0, 0, 0], # in mm!
+# }
 
 
 # %%
