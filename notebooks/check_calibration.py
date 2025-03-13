@@ -5,6 +5,11 @@ import importlib
 import itertools as itr
 
 import numpy as np
+from aind_mri_utils.reticle_calibrations import (
+    debug_manual_calibration,
+    transform_bregma_to_probe,
+    transform_probe_to_bregma,
+)
 from aind_mri_utils import parallax_calibration as pc
 from aind_mri_utils import reticle_calibrations as rc
 from matplotlib import pyplot as plt
@@ -31,6 +36,13 @@ def calc_pairwise_distances(pts):
 
 # %%
 # Load the calibration file
+(
+    cal_by_probe,
+    R_reticle_to_bregma,
+    t_reticle_to_bregma,
+    adjusted_pairs_by_probe,
+    errs_by_probe,
+)
 (
     adjusted_pairs_by_probe,
     global_offset,
@@ -60,16 +72,16 @@ translation_parallax, R_parallax, scale_parallax, _ = rt.fit_params(
     probe_pts, reticle_pts
 )
 # %%
-fit_reticle_pts = rc.transform_probe_to_reticle(
+fit_reticle_pts = rc.transform_probe_to_bregma(
     probe_pts, R, translation, scaling
 )
-fit_reticle_pts_unscaled = rc.transform_probe_to_reticle(
+fit_reticle_pts_unscaled = rc.transform_probe_to_bregma(
     probe_pts, R_unscaled, translation_unscaled
 )
-fit_probe_pts = rc.transform_reticle_to_probe(
+fit_probe_pts = rc.transform_bregma_to_probe(
     reticle_pts, R, translation, scaling
 )
-fit_probe_pts_unscaled = rc.transform_reticle_to_probe(
+fit_probe_pts_unscaled = rc.transform_bregma_to_probe(
     reticle_pts, R_unscaled, translation_unscaled
 )
 # %%

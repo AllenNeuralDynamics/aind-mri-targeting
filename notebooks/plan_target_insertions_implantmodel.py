@@ -31,7 +31,7 @@ from aind_mri_utils.planning import (
 from aind_mri_utils.reticle_calibrations import (
     fit_rotation_params,
     read_reticle_calibration,
-    transform_probe_to_reticle,
+    transform_probe_to_bregma,
 )
 
 # %%
@@ -53,8 +53,8 @@ headframe_model_dir = base_dir / "ephys/persist/data/MRI/HeadframeModels/"
 probe_model_file = (
     headframe_model_dir / "dovetailtweezer_oneShank_centered_corrected.obj"
 )  # "modified_probe_holder.obj"
-annotations_path = base_dir / "ephys/persist/data/MRI/processed/{}/UW_2025".format(
-    mouse
+annotations_path = (
+    base_dir / "ephys/persist/data/MRI/processed/{}/UW_2025".format(mouse)
 )
 
 hole_folder = headframe_model_dir / "HoleOBJs"
@@ -275,7 +275,7 @@ if measured_hole_centers:
         thisprobe = row["Probe"]
         used_scaling = row["Scaling used?"] == "yes"
         fit_type = "scaling" if used_scaling else "no_scaling"
-        hole_measures_ras[hole_num] = transform_probe_to_reticle(
+        hole_measures_ras[hole_num] = transform_probe_to_bregma(
             probe_pt,
             transforms[calfile][thisprobe][fit_type]["rotation"],
             transforms[calfile][thisprobe][fit_type]["offset"],

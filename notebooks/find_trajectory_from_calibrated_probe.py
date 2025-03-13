@@ -148,7 +148,7 @@ transformed_global_points = dict()
 for probe in measurements:
     transformed_global_points[probe] = dict()
     for name, coord in measurements[probe].items():
-        transformed_global_points[probe][name] = rc.transform_probe_to_reticle(
+        transformed_global_points[probe][name] = rc.transform_probe_to_bregma(
             measurements[probe][name] / 1000,
             transform_rs[probe],
             transform_offsets[probe],

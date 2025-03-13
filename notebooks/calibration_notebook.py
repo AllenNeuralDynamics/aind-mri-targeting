@@ -131,7 +131,7 @@ print(target_df)
     global_offset,
     global_rotation_degrees,
     reticle_name,
-) = rc.read_reticle_calibration(cal_file)
+) = rc.read_manual_reticle_calibration(cal_file)
 
 # %% [markdown]
 # ## Fit rotation parameters
@@ -173,7 +173,7 @@ for probe, (reticle_pts, probe_pts) in adjusted_pairs_by_probe.items():
         scale = scale_vecs[probe]
     else:
         scale = None
-    predicted_probe_pts = rc.transform_reticle_to_probe(
+    predicted_probe_pts = rc.transform_bregma_to_probe(
         reticle_pts, rotations[probe], translations[probe], scale
     )
     # in µm
@@ -212,7 +212,7 @@ for probe, (target_name, overshoot) in targets_and_overshoots_by_probe.items():
         scale = scale_vecs[probe]
     else:
         scale = None
-    probe_target = rc.transform_reticle_to_probe(
+    probe_target = rc.transform_bregma_to_probe(
         target, rotations[probe], translations[probe], scale
     )
     probe_target_and_overshoot = probe_target + overshoot_arr
@@ -233,7 +233,7 @@ for probe, target in manual_bregma_targets_by_probe.items():
         scale = scale_vecs[probe]
     else:
         scale = None
-    probe_target = rc.transform_reticle_to_probe(
+    probe_target = rc.transform_bregma_to_probe(
         target_arr, rotations[probe], translations[probe], scale
     )
     target_rnd, probe_target_rnd = _round_targets(target_arr, probe_target)
