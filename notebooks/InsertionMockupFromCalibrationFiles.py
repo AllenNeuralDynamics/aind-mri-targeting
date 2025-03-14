@@ -55,7 +55,7 @@ from aind_mri_utils.rotations import (
     prepare_data_for_homogeneous_transform,
     make_homogeneous_transform,
     apply_rotate_translate,
-    inverse_rotate_translate,
+    invert_rotate_translate,
     compose_transforms,
 )
 from aind_mri_utils.arc_angles import (
@@ -379,7 +379,7 @@ implant_targets = np.vstack(implant_targets)
 chem_shift_pt_R, chem_shift_pt_t = chemical_shift_transform(
     compute_chemical_shift(image, ppm=3.7)
 )
-chem_shift_image_R, chem_shift_image_t = inverse_rotate_translate(
+chem_shift_image_R, chem_shift_image_t = invert_rotate_translate(
     chem_shift_pt_R, chem_shift_pt_t
 )
 chem_image_R, chem_image_t = compose_transforms(
@@ -393,16 +393,16 @@ implant_model_lps = cs.convert_coordinate_system(
 )  # Preserves shape!
 
 transformed_brain = apply_rotate_translate(
-    brain_pos, *inverse_rotate_translate(chem_image_R, chem_image_t)
+    brain_pos, *invert_rotate_translate(chem_image_R, chem_image_t)
 )
 transformed_brain_mesh = apply_transform_to_trimesh(
-    brain_mesh.copy(), *inverse_rotate_translate(chem_image_R, chem_image_t)
+    brain_mesh.copy(), *invert_rotate_translate(chem_image_R, chem_image_t)
 )
 transformed_implant_targets = apply_rotate_translate(
-    implant_targets, *inverse_rotate_translate(headframe_R, headframe_t)
+    implant_targets, *invert_rotate_translate(headframe_R, headframe_t)
 )
 transformed_fidicuals = apply_rotate_translate(
-    fiducial_positions, *inverse_rotate_translate(image_R, image_t)
+    fiducial_positions, *invert_rotate_translate(image_R, image_t)
 )
 
 # %%
@@ -641,18 +641,18 @@ transformed_implant_targets = {}
 for ii, key in enumerate(model_implant_targets.keys()):
     implant_tgt = model_implant_targets[key]
     implant_tgt = apply_rotate_translate(
-        implant_tgt, *inverse_rotate_translate(implant_R, implant_t)
+        implant_tgt, *invert_rotate_translate(implant_R, implant_t)
     )
     implant_tgt = apply_rotate_translate(
-        implant_tgt, *inverse_rotate_translate(headframe_R, headframe_t)
+        implant_tgt, *invert_rotate_translate(headframe_R, headframe_t)
     )
     transformed_implant_targets[key] = implant_tgt
 
 vertices = apply_rotate_translate(
-    implant_model_lps, *inverse_rotate_translate(implant_R, implant_t)
+    implant_model_lps, *invert_rotate_translate(implant_R, implant_t)
 )
 vertices = apply_rotate_translate(
-    vertices, *inverse_rotate_translate(headframe_R, headframe_t)
+    vertices, *invert_rotate_translate(headframe_R, headframe_t)
 )
 implant_mesh = trimesh.Trimesh(vertices=vertices, faces=implant_faces[0])
 
@@ -749,7 +749,7 @@ for ii, structure in enumerate(target_structures):
     )
     vertices = this_target_mesh.vertices
     vertices = apply_rotate_translate(
-        vertices, *inverse_rotate_translate(chem_image_R, chem_image_t)
+        vertices, *invert_rotate_translate(chem_image_R, chem_image_t)
     )
     this_target_mesh.vertices = vertices
     trimesh.repair.fix_normals(this_target_mesh)
