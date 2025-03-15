@@ -48,16 +48,17 @@ import pandas as pd
 from aind_mri_utils.reticle_calibrations import (
     debug_parallax_and_manual_calibrations,
     transform_bregma_to_probe,
+    transform_probe_to_bregma,
 )
 
 logger = logging.getLogger(__name__)
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.DEBUG)
 # %%
 # Set file paths and mouse ID here
 
 # Calibration File with probe data
-mouse_id = "727354"
+mouse_id = "771432"
 basepath = Path("/mnt/aind1-vast/scratch/")
 calibration_dir = (
     basepath / "ephys/persist/data/probe_calibrations/CSVCalibrations/"
@@ -89,6 +90,10 @@ manual_calibration_paths = [
 # error will be lower. If you have only a few data points, try setting this to
 # True and False and compare.
 fit_scale = True
+
+# Whether to save the targets to a CSV file. If not None, the targets will be
+# saved
+save_path = None
 
 
 # %%
@@ -134,8 +139,8 @@ print(target_df)
 # targets_and_overshoots_by_probe = {probe_id: (target_name, overshoot), ...}
 # overshoot in µm
 targets_and_overshoots_by_probe = {
-    46110: ("AntComMid", 500),
-    46100: ("GenFacCran2", 500),
+    46110: ("Hole 1", 500),
+    46100: ("Hole 2", 500),
 }
 # Targets in bregma-relative coordinates not in the target file
 # manual_bregma_targets_by_probe = {probe_id: [x, y, z], ...}
@@ -169,7 +174,7 @@ manual_bregma_targets_by_probe = {
     manual_calibration_paths,
     parallax_calibration_paths,
     probes_to_ignore_manual,
-    fit_scaling=fit_scale,
+    find_scaling=fit_scale,
 )
 # %% [markdown]
 # ## Probe targets in manipulator coordinates
@@ -182,33 +187,58 @@ manual_bregma_targets_by_probe = {
 # Print the transformed targets in manipulator coordinates
 
 # Combine the targets and overshoots with the manual targets
+
+dims = ["ML (mm)", "AP (mm)", "DV (mm)"]
 combined_targets_and_overshoots_by_probe = {}
 for probe, (target_name, overshoot) in targets_and_overshoots_by_probe.items():
-    target = target_df.loc[target_name].to_numpy()
+    target = target_df.loc[target_name, dims].to_numpy().astype(np.float64)
     overshoot_arr = np.array([0, 0, overshoot / 1000])
-    combined_targets_and_overshoots_by_probe[probe] = (target, overshoot_arr)
+    combined_targets_and_overshoots_by_probe[probe] = (
+        target_name,
+        target,
+        overshoot_arr,
+    )
 for probe, target in manual_bregma_targets_by_probe.items():
     target_arr = np.array(target)
     combined_targets_and_overshoots_by_probe[probe] = (
+        "Manual",
         target_arr,
         np.array([0, 0, 0]),
     )
 
+zaber_dims = ["X (µm)", "Y (µm)", "Z (µm)"]
+output_dims = ["Probe", "Target", "Overshoot (µm)"] + dims + zaber_dims
+cols = {}
 for probe, (
+    target_name,
     target,
     overshoot,
 ) in combined_targets_and_overshoots_by_probe.items():
     if probe not in combined_cal_by_probe:
         logger.warning(f"Probe {probe} not in calibration files")
         continue
+    cols.setdefault("Probe", []).append(probe)
+    cols.setdefault("Target", []).append(target_name)
+    cols.setdefault("Overshoot (µm)", []).append(1000 * overshoot[2])
     R, t, _ = combined_cal_by_probe[probe]
     probe_target = transform_bregma_to_probe(target, R, t)
     probe_target_and_overshoot = probe_target + overshoot
     target_rnd, probe_target_and_overshoot_rnd = _round_targets(
         target, probe_target_and_overshoot
     )
-    print(
-        f"Probe {probe}: Target {target_name} {target_rnd} (mm) "
-        f"-> manipulator coord. {probe_target_and_overshoot_rnd} (µm) "
-        f"w/ {overshoot} µm overshoot"
+    final_target_bregma = np.round(
+        transform_probe_to_bregma(probe_target_and_overshoot, R, t), 3
     )
+    for dim, dim_val in zip(dims, final_target_bregma):
+        cols.setdefault(dim, []).append(np.round(dim_val, 3))
+    for dim, dim_val in zip(zaber_dims, probe_target_and_overshoot_rnd):
+        cols.setdefault(dim, []).append(dim_val)
+
+df_transformed = pd.DataFrame.from_dict(cols).set_index("Probe").sort_index()
+# %%
+# Print the targets (AP, ML, DV) and their transformed newscale coordinates (X Y Z)
+df_transformed
+# %%
+if save_path is not None:
+    df_transformed.to_csv(save_path)
+# %%
