@@ -16,7 +16,6 @@
 # %%
 import numpy as np
 
-import numpy as np
 import SimpleITK as sitk
 from matplotlib import pyplot as plt
 import mpl_toolkits.mplot3d.axes3d as p3
@@ -28,39 +27,26 @@ implant_cmap = matplotlib.cm.get_cmap("rainbow")
 import pandas as pd
 from aind_mri_utils import rotations as rot
 from aind_mri_utils.file_io.slicer_files import (
-    markup_json_to_numpy,
-    markup_json_to_dict,
     load_segmentation_points,
     find_seg_nrrd_header_segment_info,
-    create_slicer_fcsv,
-    read_slicer_fcsv,
 )
 from aind_mri_utils.file_io.obj_files import get_vertices_and_faces
 from aind_mri_utils.file_io.simpleitk import (
-    save_sitk_transform,
     load_sitk_transform,
 )
 from aind_mri_utils.plots import (
-    make_3d_ax_look_normal,
-    plot_tri_mesh,
-    set_axes_equal,
     get_prop_cycle,
 )
 from aind_mri_utils import coordinate_systems as cs
-from aind_mri_utils.measurement import angle
 
 from aind_mri_utils.optimization import get_headframe_hole_lines
-from aind_mri_utils.optimization import optimize_transform_labeled_lines
 from aind_mri_utils.rotations import (
-    prepare_data_for_homogeneous_transform,
-    make_homogeneous_transform,
     apply_rotate_translate,
     invert_rotate_translate,
     compose_transforms,
 )
 from aind_mri_utils.arc_angles import (
     transform_matrix_from_angles,
-    calculate_arc_angles,
 )
 
 from aind_mri_utils.meshes import (
@@ -73,24 +59,14 @@ from aind_mri_utils.chemical_shift import (
 )
 
 from aind_mri_utils.reticle_calibrations import (
-    transform_probe_to_bregma,
-    transform_bregma_to_probe,
-    fit_rotation_params,
     find_probe_angle,
-    find_probe_insertion_vector,
 )
 
 
-import pywavefront
-from pywavefront import visualization
 from pathlib import Path
 import os
 
-from scipy.optimize import fmin
 from scipy.spatial.transform import Rotation
-
-
-import json
 
 
 colors = get_prop_cycle()
