@@ -15,9 +15,9 @@ from aind_mri_utils.chemical_shift import (
     chemical_shift_transform,
     compute_chemical_shift,
 )
-from aind_mri_utils.file_io.simpleitk import load_sitk_transform
 from aind_mri_utils.file_io import slicer_files as sf
 from aind_mri_utils.file_io.obj_files import get_vertices_and_faces
+from aind_mri_utils.file_io.simpleitk import load_sitk_transform
 from aind_mri_utils.meshes import (
     apply_transform_to_trimesh,
     load_newscale_trimesh,
