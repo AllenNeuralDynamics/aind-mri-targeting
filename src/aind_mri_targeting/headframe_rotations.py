@@ -278,4 +278,4 @@ def calculate_headframe_transforms(
     ):
         affine = theta_to_sitk_affine(R, transl, inverse=volume_transforms)
         sitk.WriteTransform(affine, str(fname))
-    return 
+    return
