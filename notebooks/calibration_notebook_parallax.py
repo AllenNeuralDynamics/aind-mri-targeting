@@ -35,21 +35,21 @@
 # the predicted probe coordinates for each reticle coordinate with error for that coordinate.
 # 8. Run the last cell to get the transformed targets in manipulator coordinates
 
+import os
+
 # %%
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import os
 
 # %matplotlib inline
 from aind_mri_utils import reticle_calibrations as rc
-
 from aind_mri_utils.reticle_calibrations import (
+    debug_manual_calibration,
+    debug_parallax_calibration,
     read_parallax_calibration,
     read_reticle_calibration,
-    debug_parallax_calibration,
-    debug_manual_calibration,
 )
 
 # %%

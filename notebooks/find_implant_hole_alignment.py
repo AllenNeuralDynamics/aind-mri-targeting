@@ -33,7 +33,7 @@ mouse_folder = processed_folder / str(mouse_id)
 # required files
 implant_annotations_file = mouse_folder / f"{mouse_id}_ImplantHoles.seg.nrrd"
 hole_folder = mri_folder / "HeadframeModels/HoleOBJs"
-save_name = str(mouse_folder  )#f"{mouse_id}_implant_fit.h5")
+save_name = str(mouse_folder)  # f"{mouse_id}_implant_fit.h5")
 
 # optional flags
 save_inverse = (

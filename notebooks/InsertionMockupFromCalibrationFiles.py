@@ -13,61 +13,47 @@
 #     name: python3
 # ---
 
+import aind_mri_utils.reticle_calibrations as rc
+import matplotlib
+import mpl_toolkits.mplot3d.axes3d as p3
+
 # %%
 import numpy as np
-
 import SimpleITK as sitk
 from matplotlib import pyplot as plt
-import mpl_toolkits.mplot3d.axes3d as p3
-import matplotlib
-import aind_mri_utils.reticle_calibrations as rc
 
 implant_cmap = matplotlib.cm.get_cmap("rainbow")
 
+import os
+from pathlib import Path
+
 import pandas as pd
+from aind_mri_utils import coordinate_systems as cs
 from aind_mri_utils import rotations as rot
-from aind_mri_utils.file_io.slicer_files import (
-    load_segmentation_points,
-    find_seg_nrrd_header_segment_info,
+from aind_mri_utils.arc_angles import transform_matrix_from_angles
+from aind_mri_utils.chemical_shift import (
+    chemical_shift_transform,
+    compute_chemical_shift,
 )
 from aind_mri_utils.file_io.obj_files import get_vertices_and_faces
-from aind_mri_utils.file_io.simpleitk import (
-    load_sitk_transform,
+from aind_mri_utils.file_io.simpleitk import load_sitk_transform
+from aind_mri_utils.file_io.slicer_files import (
+    find_seg_nrrd_header_segment_info,
+    load_segmentation_points,
 )
-from aind_mri_utils.plots import (
-    get_prop_cycle,
-)
-from aind_mri_utils import coordinate_systems as cs
-
-from aind_mri_utils.optimization import get_headframe_hole_lines
-from aind_mri_utils.rotations import (
-    apply_rotate_translate,
-    invert_rotate_translate,
-    compose_transforms,
-)
-from aind_mri_utils.arc_angles import (
-    transform_matrix_from_angles,
-)
-
 from aind_mri_utils.meshes import (
     apply_transform_to_trimesh,
     load_newscale_trimesh,
 )
-from aind_mri_utils.chemical_shift import (
-    compute_chemical_shift,
-    chemical_shift_transform,
+from aind_mri_utils.optimization import get_headframe_hole_lines
+from aind_mri_utils.plots import get_prop_cycle
+from aind_mri_utils.reticle_calibrations import find_probe_angle
+from aind_mri_utils.rotations import (
+    apply_rotate_translate,
+    compose_transforms,
+    invert_rotate_translate,
 )
-
-from aind_mri_utils.reticle_calibrations import (
-    find_probe_angle,
-)
-
-
-from pathlib import Path
-import os
-
 from scipy.spatial.transform import Rotation
-
 
 colors = get_prop_cycle()
 
@@ -80,7 +66,7 @@ def create_single_colormap(
     is_transparent=True,
     is_reverse=False,
 ):
-    from matplotlib.colors import ListedColormap, LinearSegmentedColormap
+    from matplotlib.colors import LinearSegmentedColormap, ListedColormap
 
     cmap = ListedColormap([start_color, colorname])
     start_color = np.array(cmap(0))
@@ -141,7 +127,6 @@ def define_transform(source_landmarks, target_landmarks):
 
 
 import trimesh
-
 
 # %%
 # %matplotlib ipympl
