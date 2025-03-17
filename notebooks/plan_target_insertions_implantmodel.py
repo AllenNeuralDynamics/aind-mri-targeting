@@ -31,13 +31,13 @@ from aind_mri_utils.planning import (
 from aind_mri_utils.reticle_calibrations import (
     fit_rotation_params,
     read_reticle_calibration,
-    transform_probe_to_reticle,
+    transform_probe_to_bregma,
 )
 
 # %%
-mouse = "760333"
+mouse = "765860"
 vaseline_ppm = 3.67  # (3.7 + 4.1) / 2 for previous
-whoami = "galen"
+whoami = "yoni"
 if whoami == "galen":
     base_dir = Path("/mnt/aind1-vast/scratch/")
     base_save_dir = Path("/home/galen.lynch/")
@@ -53,8 +53,8 @@ headframe_model_dir = base_dir / "ephys/persist/data/MRI/HeadframeModels/"
 probe_model_file = (
     headframe_model_dir / "dovetailtweezer_oneShank_centered_corrected.obj"
 )  # "modified_probe_holder.obj"
-annotations_path = base_dir / "ephys/persist/data/MRI/processed/{}".format(
-    mouse
+annotations_path = (
+    base_dir / "ephys/persist/data/MRI/processed/{}/UW_2025".format(mouse)
 )
 
 hole_folder = headframe_model_dir / "HoleOBJs"
@@ -78,17 +78,18 @@ labels_path = str(
 brain_mask_path = str(
     annotations_path / ("{}_auto_skull_strip.nrrd".format(mouse))
 )
-manual_annotation_path = str(
-    annotations_path / (f"{mouse}-targets-from-template.fcsv")
+
+template_annotation_path = str(
+    annotations_path / ("fiducials-{}-transformed.fcsv".format(mouse))
 )
 cone_path = (
     base_dir
     / "ephys/persist/Software/PinpointBuilds/WavefrontFiles/Cone_0160-200-53.obj"  # noqa E501
 )
 
-uw_yoni_annotation_path = (
-    annotations_path / f"targets-{mouse}-transformed.fcsv"
-)
+# uw_yoni_annotation_path = (
+#     annotations_path / "fiducials-{}-transformed.fcsv".format(mouse)
+# )
 
 newscale_file_name = headframe_path / "Centered_Newscale_2pt0.obj"
 #
@@ -109,7 +110,7 @@ transformed_targets_save_path = annotations_path / (
 test_probe_translation_save_path = str(
     base_save_dir / "test_probe_translation.h5"
 )
-transform_filename = str(annotations_path / (mouse + "_com_plane.h5"))
+transform_filename = str(annotations_path / ("com_plane.h5"))
 
 # %%
 target_structures = None  # ["CCant", "CCpst", "AntComMid", "GenFacCran2"]
@@ -117,7 +118,7 @@ target_structures = None  # ["CCant", "CCpst", "AntComMid", "GenFacCran2"]
 # %%
 image = sitk.ReadImage(image_path)
 # Read points
-manual_annotation = sf.read_slicer_fcsv(manual_annotation_path)
+template_annotation = sf.read_slicer_fcsv(template_annotation_path)
 
 # Load the headframe
 headframe, headframe_faces = get_vertices_and_faces(headframe_path)
@@ -148,8 +149,8 @@ chem_shift_trans = chemical_shift_transform(chem_shift, readout="HF")
 
 # List targeted locations
 if target_structures is None:
-    target_structures = list(manual_annotation.keys())
-preferred_pts = {k: manual_annotation[k] for k in target_structures}
+    target_structures = list(template_annotation.keys())
+preferred_pts = {k: template_annotation[k] for k in target_structures}
 
 hmg_pts = rot.prepare_data_for_homogeneous_transform(
     np.array(tuple(preferred_pts.values()))
@@ -274,7 +275,7 @@ if measured_hole_centers:
         thisprobe = row["Probe"]
         used_scaling = row["Scaling used?"] == "yes"
         fit_type = "scaling" if used_scaling else "no_scaling"
-        hole_measures_ras[hole_num] = transform_probe_to_reticle(
+        hole_measures_ras[hole_num] = transform_probe_to_bregma(
             probe_pt,
             transforms[calfile][thisprobe][fit_type]["rotation"],
             transforms[calfile][thisprobe][fit_type]["offset"],
@@ -292,7 +293,7 @@ for i, n in enumerate(target_names):
             d: transformed_annotation_ras[i, j]
             for j, d in enumerate(dim_names)
         },
-        "point source": "manual",
+        "point source": "Fiducial From Template",
     }
     annotation_data.append(target)
 

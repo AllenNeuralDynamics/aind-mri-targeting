@@ -7,7 +7,7 @@
 #       format_version: '1.3'
 #       jupytext_version: 1.16.3
 #   kernelspec:
-#     display_name: Python 3.9.12 ('base')
+#     display_name: Python 3 (ipykernel)
 #     language: python
 #     name: python3
 # ---
@@ -20,7 +20,7 @@
 #
 # # How to use this notebook
 # 1. Set the mouse ID in the cell two below.
-# 2. Set the path to the calibration file with the probe data.
+# 2. Set the path to the calibration files with the probe data.
 # 3. Set the path to the target file.
 # 4. Optionally set `fit_scale` to `True` if you want to fit the scale
 # parameters as well. This is not recommended unless you have a good reason to
@@ -38,19 +38,27 @@
 # coordinates
 
 # %%
+import logging
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 # %matplotlib inline
-from aind_mri_utils import reticle_calibrations as rc
+from aind_mri_utils.reticle_calibrations import (
+    debug_parallax_and_manual_calibrations,
+    transform_bregma_to_probe,
+    transform_probe_to_bregma,
+)
 
+logger = logging.getLogger(__name__)
+
+logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.DEBUG)
 # %%
 # Set file paths and mouse ID here
 
 # Calibration File with probe data
-mouse_id = "727354"
+mouse_id = "771432"
 basepath = Path("/mnt/aind1-vast/scratch/")
 calibration_dir = (
     basepath / "ephys/persist/data/probe_calibrations/CSVCalibrations/"
@@ -58,25 +66,40 @@ calibration_dir = (
 
 # Target file with transformed targets
 target_dir = basepath / f"ephys/persist/data/MRI/processed/{mouse_id}/"
-cal_file = calibration_dir / "calibration_info_np2_2024_08_05T14_34_00.xlsx"
+# Calibration directories to use for parallax, with the latter ones taking
+# priority
+parallax_calibration_directories = ["log_20250311_110408"]
+# Calibration files to use for manual calibration, with the latter ones taking
+# priority. All manual calibrations will take priority over parallax
+# calibrations
+manual_calibration_filenames = [
+    "calibration_info_np2_2024_08_05T14_34_00.xlsx"
+]
+# List of probes to ignore manual calibrations from
+probes_to_ignore_manual = []
 target_file = target_dir / f"{mouse_id}_TransformedTargets.csv"
 
-# Whether to fit the scale parameters as well. This is not recommended unless
-# you have a good reason to do so.  Does not guarantee that the error will be
-# lower
-fit_scale = False
+parallax_calibration_paths = [
+    calibration_dir / f for f in parallax_calibration_directories
+]
+manual_calibration_paths = [
+    calibration_dir / f for f in manual_calibration_filenames
+]
 
-# Whether to print the mean and maximum error for each probe and the predicted
-# probe coordinates for each reticle coordinate with error for that coordinate
-verbose = True
+# Whether to fit the scale parameters as well. Does not guarantee that the
+# error will be lower. If you have only a few data points, try setting this to
+# True and False and compare.
+fit_scale = True
+
+# Whether to save the targets to a CSV file. If not None, the targets will be
+# saved
+save_path = None
 
 
 # %%
 def _round_targets(target, probe_target):
     target_rnd = np.round(target, decimals=2)
-    probe_target_and_overshoot_rnd = (
-        np.round(2000 * probe_target_and_overshoot) / 2
-    )
+    probe_target_and_overshoot_rnd = np.round(2000 * probe_target) / 2
     return target_rnd, probe_target_and_overshoot_rnd
 
 
@@ -107,31 +130,25 @@ print(target_df)
 # manually. The format should be
 #
 # ```python manual_bregma_targets_by_probe = { probe_id: [x, y, z], ...  } ```
-# where `[x, y, z]` are the coordinates in mm.  %% Set experiment configuration
-# here
+# where `[x, y, z]` are the coordinates in mm.
 
+# %%
+# Set experiment configuration # here
+#
 # Names of targets in the target file and overshoots
 # targets_and_overshoots_by_probe = {probe_id: (target_name, overshoot), ...}
 # overshoot in µm
 targets_and_overshoots_by_probe = {
-    46110: ("AntComMid", 500),
-    46100: ("GenFacCran2", 500),
+    46110: ("Hole 1", 500),
+    46100: ("Hole 2", 500),
 }
 # Targets in bregma-relative coordinates not in the target file
 # manual_bregma_targets_by_probe = {probe_id: [x, y, z], ...}
 # x y z in mm
 manual_bregma_targets_by_probe = {
-    # 46110: [0, 0, 0], # in mm!
+    # 46110: [0, 0, 0],  # in mm!
 }
 
-
-# %%
-(
-    adjusted_pairs_by_probe,
-    global_offset,
-    global_rotation_degrees,
-    reticle_name,
-) = rc.read_reticle_calibration(cal_file)
 
 # %% [markdown]
 # ## Fit rotation parameters
@@ -146,52 +163,19 @@ manual_bregma_targets_by_probe = {
 # The reticle coordinate displayed will NOT have the global offset applied.
 # However, the scaling factor will have been applied.
 # %%
-# Calculate the rotation parameters and display errors if verbose is set to
-# True
-
-rotations = dict()
-translations = dict()
-if fit_scale:
-    scale_vecs = dict()
-    for probe, (reticle_pts, probe_pts) in adjusted_pairs_by_probe.items():
-        (rotation, scale, translation, _) = rc.fit_rotation_params(
-            reticle_pts, probe_pts, find_scaling=True
-        )
-        rotations[probe] = rotation
-        scale_vecs[probe] = scale
-        translations[probe] = translation
-else:
-    for probe, (reticle_pts, probe_pts) in adjusted_pairs_by_probe.items():
-        rotation, translation, _ = rc.fit_rotation_params(
-            reticle_pts, probe_pts, find_scaling=False
-        )
-        rotations[probe] = rotation
-        translations[probe] = translation
-
-for probe, (reticle_pts, probe_pts) in adjusted_pairs_by_probe.items():
-    if fit_scale:
-        scale = scale_vecs[probe]
-    else:
-        scale = None
-    predicted_probe_pts = rc.transform_reticle_to_probe(
-        reticle_pts, rotations[probe], translations[probe], scale
-    )
-    # in µm
-    errs = 1000 * np.linalg.norm(predicted_probe_pts - probe_pts, axis=1)
-    if verbose:
-        print(
-            f"Probe {probe}: Mean error {errs.mean():.2f} µm, "
-            f"max error {errs.max():.2f} µm"
-        )
-        original_reticle_pts = reticle_pts - global_offset
-        for i in range(len(errs)):
-            rounded_pred = np.round(predicted_probe_pts[i], decimals=2)
-            print(
-                f"\tReticle {original_reticle_pts[i]} -> "
-                f"Probe {probe_pts[i]}: predicted {rounded_pred} "
-                f"error {errs[i]:.2f} µm"
-            )
-
+# Calculate the rotation parameters
+(
+    combined_cal_by_probe,
+    R_reticle_to_bregma,
+    t_reticle_to_bregma,
+    combined_pairs_by_probe,
+    errs_by_probe,
+) = debug_parallax_and_manual_calibrations(
+    manual_calibration_paths,
+    parallax_calibration_paths,
+    probes_to_ignore_manual,
+    find_scaling=fit_scale,
+)
 # %% [markdown]
 # ## Probe targets in manipulator coordinates
 # Get the transformed targets in manipulator coordinates using the fitted
@@ -202,42 +186,59 @@ for probe, (reticle_pts, probe_pts) in adjusted_pairs_by_probe.items():
 # %%
 # Print the transformed targets in manipulator coordinates
 
+# Combine the targets and overshoots with the manual targets
+
+dims = ["ML (mm)", "AP (mm)", "DV (mm)"]
+combined_targets_and_overshoots_by_probe = {}
 for probe, (target_name, overshoot) in targets_and_overshoots_by_probe.items():
-    if probe not in rotations:
-        print(f"Probe {probe} not in calibration file")
-        continue
-    target = target_df.loc[target_name].to_numpy()
+    target = target_df.loc[target_name, dims].to_numpy().astype(np.float64)
     overshoot_arr = np.array([0, 0, overshoot / 1000])
-    if fit_scale:
-        scale = scale_vecs[probe]
-    else:
-        scale = None
-    probe_target = rc.transform_reticle_to_probe(
-        target, rotations[probe], translations[probe], scale
+    combined_targets_and_overshoots_by_probe[probe] = (
+        target_name,
+        target,
+        overshoot_arr,
     )
-    probe_target_and_overshoot = probe_target + overshoot_arr
+for probe, target in manual_bregma_targets_by_probe.items():
+    target_arr = np.array(target)
+    combined_targets_and_overshoots_by_probe[probe] = (
+        "Manual",
+        target_arr,
+        np.array([0, 0, 0]),
+    )
+
+zaber_dims = ["X (µm)", "Y (µm)", "Z (µm)"]
+output_dims = ["Probe", "Target", "Overshoot (µm)"] + dims + zaber_dims
+cols = {}
+for probe, (
+    target_name,
+    target,
+    overshoot,
+) in combined_targets_and_overshoots_by_probe.items():
+    if probe not in combined_cal_by_probe:
+        logger.warning(f"Probe {probe} not in calibration files")
+        continue
+    cols.setdefault("Probe", []).append(probe)
+    cols.setdefault("Target", []).append(target_name)
+    cols.setdefault("Overshoot (µm)", []).append(1000 * overshoot[2])
+    R, t, _ = combined_cal_by_probe[probe]
+    probe_target = transform_bregma_to_probe(target, R, t)
+    probe_target_and_overshoot = probe_target + overshoot
     target_rnd, probe_target_and_overshoot_rnd = _round_targets(
         target, probe_target_and_overshoot
     )
-    print(
-        f"Probe {probe}: Target {target_name} {target_rnd} (mm) "
-        f"-> manipulator coord. {probe_target_and_overshoot_rnd} (µm) "
-        f"w/ {overshoot} µm overshoot"
+    final_target_bregma = np.round(
+        transform_probe_to_bregma(probe_target_and_overshoot, R, t), 3
     )
-for probe, target in manual_bregma_targets_by_probe.items():
-    if probe not in rotations:
-        print(f"Probe {probe} not in calibration file")
-        continue
-    target_arr = np.array(target)
-    if fit_scale:
-        scale = scale_vecs[probe]
-    else:
-        scale = None
-    probe_target = rc.transform_reticle_to_probe(
-        target_arr, rotations[probe], translations[probe], scale
-    )
-    target_rnd, probe_target_rnd = _round_targets(target_arr, probe_target)
-    print(
-        f"Probe {probe}: Manual target {target_rnd} (mm) -> manipulator "
-        f"coord. {probe_target_rnd} (µm)"
-    )
+    for dim, dim_val in zip(dims, final_target_bregma):
+        cols.setdefault(dim, []).append(np.round(dim_val, 3))
+    for dim, dim_val in zip(zaber_dims, probe_target_and_overshoot_rnd):
+        cols.setdefault(dim, []).append(dim_val)
+
+df_transformed = pd.DataFrame.from_dict(cols).set_index("Probe").sort_index()
+# %%
+# Print the targets (AP, ML, DV) and their transformed newscale coordinates (X Y Z)
+df_transformed
+# %%
+if save_path is not None:
+    df_transformed.to_csv(save_path)
+# %%

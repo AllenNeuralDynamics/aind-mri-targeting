@@ -7,7 +7,7 @@
 #       format_version: '1.3'
 #       jupytext_version: 1.16.3
 #   kernelspec:
-#     display_name: Python 3.9.12 ('base')
+#     display_name: Python 3 (ipykernel)
 #     language: python
 #     name: python3
 # ---
@@ -45,6 +45,13 @@ import os
 # %matplotlib inline
 from aind_mri_utils import reticle_calibrations as rc
 
+from aind_mri_utils.reticle_calibrations import (
+    read_parallax_calibration,
+    read_reticle_calibration,
+    debug_parallax_calibration,
+    debug_manual_calibration,
+)
+
 # %%
 # Set file paths and mouse ID here
 
@@ -53,13 +60,24 @@ mouse_id = "760332"
 calib_date = "20241203"
 reticle_used = "H"
 basepath = Path(r"Z:")
-parallax_debug_dir = Path(r"C:\Users\svc_aind_ephys\Documents\Code\parallax\debug")
-calib_folder = [f for f in os.listdir(parallax_debug_dir) if f.startswith("log_" + str(calib_date))]
-calib_dir = Path(r"C:\Users\svc_aind_ephys\Documents\Code\parallax\debug\\" + str(calib_folder[-1]))
+parallax_debug_dir = Path(
+    r"C:\Users\svc_aind_ephys\Documents\Code\parallax\debug"
+)
+calib_folder = [
+    f
+    for f in os.listdir(parallax_debug_dir)
+    if f.startswith("log_" + str(calib_date))
+]
+calib_dir = Path(
+    r"C:\Users\svc_aind_ephys\Documents\Code\parallax\debug\\"
+    + str(calib_folder[-1])
+)
+
+manual_calibration_file = r"path/to/file.xlsx"
 
 # Target file with transformed targets
 target_dir = basepath / f"ephys/persist/data/MRI/processed/{mouse_id}"
-#target_file = target_dir / f"{mouse_id}_TransformedTargets.csv"
+# target_file = target_dir / f"{mouse_id}_TransformedTargets.csv"
 target_file = target_dir / f"{mouse_id}_TransformedTargets.csv"
 
 # Whether to fit the scale parameters as well. This is not recommended unless
@@ -73,27 +91,17 @@ verbose = True
 
 reticle_offsets = {"H": np.array([0.076, 0.062, 0.311])}
 
+# List of probes where the calibration should be taken from parallax instead of
+# manual. If empty, probes calibrated both by parallax and manual will use the
+# manual calibration
+probes_to_ignore_manual_calibration = []
+
 
 # %%
 def _round_targets(target, probe_target):
     target_rnd = np.round(target, decimals=2)
-    probe_target_and_overshoot_rnd = (
-        np.round(2000 * probe_target_and_overshoot) / 2
-    )
+    probe_target_and_overshoot_rnd = np.round(2000 * probe_target) / 2
     return target_rnd, probe_target_and_overshoot_rnd
-
-
-def pairs_from_parallax_points_csv(parallax_points_filename):
-    df = pd.read_csv(parallax_points_filename)
-    pairs = []
-    dims = ["x", "y", "z"]
-    reticle_colnames = [f"global_{dim}" for dim in dims]
-    manipulator_colnames = [f"local_{dim}" for dim in dims]
-    for i, row in df.iterrows():
-        manip_pt = row[manipulator_colnames].to_numpy().astype(np.float64)
-        ret_pt = row[reticle_colnames].to_numpy().astype(np.float64)
-        pairs.append((ret_pt, manip_pt))
-    return pairs
 
 
 # %%
@@ -138,7 +146,7 @@ print(target_df)
 targets_and_overshoots_by_probe = {
     50209: ("CCpst", 0),
     50205: ("GenFacCran2", 0),
-    50197: ("GenFacCran2", 0)
+    50197: ("GenFacCran2", 0),
 }
 # Targets in bregma-relative coordinates not in the target file
 # manual_bregma_targets_by_probe = {probe_id: [x, y, z], ...}
@@ -146,25 +154,6 @@ targets_and_overshoots_by_probe = {
 manual_bregma_targets_by_probe = {
     # 46110: [0, 0, 0], # in mm!
 }
-
-# %%
-manips_used = list(
-    set(targets_and_overshoots_by_probe.keys()).union(
-        manual_bregma_targets_by_probe.keys()
-    )
-)
-adjusted_pairs_by_probe = dict()
-global_offset = reticle_offsets[reticle_used]
-global_rotation_degrees = 0
-reticle_name = reticle_used
-for manip in manips_used:
-    manip_f = [f for f in os.listdir(calib_dir) if f.startswith("points_SN" + str(manip))]
-    fname = calib_dir / f"{manip_f[-1]}"
-    pairs = pairs_from_parallax_points_csv(fname)
-    reticle_pts, manip_pts = rc._apply_metadata_to_pair_lists(
-        pairs, 1 / 1000, global_rotation_degrees, global_offset, 1 / 1000
-    )
-    adjusted_pairs_by_probe[manip] = (reticle_pts, manip_pts)
 
 # %% [markdown]
 # ## Fit rotation parameters
@@ -178,53 +167,46 @@ for manip in manips_used:
 #
 # The reticle coordinate displayed will NOT have the global offset applied.
 # However, the scaling factor will have been applied.
+
 # %%
-# Calculate the rotation parameters and display errors if verbose is set to
-# True
+manips_used = list(
+    set(targets_and_overshoots_by_probe.keys()).union(
+        manual_bregma_targets_by_probe.keys()
+    )
+)
 
 print("Calibration Directory: " + str(calib_dir))
-rotations = dict()
-translations = dict()
-if fit_scale:
-    scale_vecs = dict()
-    for probe, (reticle_pts, probe_pts) in adjusted_pairs_by_probe.items():
-        (rotation, scale, translation, _) = rc.fit_rotation_params(
-            reticle_pts, probe_pts, find_scaling=True
-        )
-        rotations[probe] = rotation
-        scale_vecs[probe] = scale
-        translations[probe] = translation
-else:
-    for probe, (reticle_pts, probe_pts) in adjusted_pairs_by_probe.items():
-        rotation, translation, _ = rc.fit_rotation_params(
-            reticle_pts, probe_pts, find_scaling=False
-        )
-        rotations[probe] = rotation
-        translations[probe] = translation
 
-for probe, (reticle_pts, probe_pts) in adjusted_pairs_by_probe.items():
-    if fit_scale:
-        scale = scale_vecs[probe]
-    else:
-        scale = None
-    predicted_probe_pts = rc.transform_reticle_to_probe(
-        reticle_pts, rotations[probe], translations[probe], scale
-    )
-    # in µm
-    errs = 1000 * np.linalg.norm(predicted_probe_pts - probe_pts, axis=1)
-    if verbose:
-        print(
-            f"Probe {probe}: Mean error {errs.mean():.2f} µm, max error {errs.max():.2f} µm"
-        )
-        print(f"rotation: {rotations[probe]}")
-        print(f"translation: {translations[probe]}")
-        print(f"scale: {scale}")
-        original_reticle_pts = reticle_pts - global_offset
-        for i in range(len(errs)):
-            rounded_pred = np.round(predicted_probe_pts[i], decimals=2)
-            print(
-                f"\tReticle {original_reticle_pts[i]} -> Probe {probe_pts[i]}: predicted {rounded_pred} error {errs[i]:.2f} µm"
-            )
+adjusted_pairs_by_probe = dict()
+global_offset = reticle_offsets[reticle_used]
+global_rotation_degrees = 0
+
+print("Loading parallax calibrations...")
+(
+    cal_by_probe_parallax,
+    adjusted_pairs_by_probe_parallax,
+    errs_by_probe_parallax,
+) = debug_parallax_calibration(
+    calib_dir,
+    global_offset,
+    global_rotation_degrees,
+    verbose=verbose,
+    find_scaling=fit_scale,
+)
+
+print("Loading manual calibrations...")
+(
+    cal_by_probe_manual,
+    adjusted_pairs_by_probe_manual,
+    global_offset_manual,
+    global_rotation_degrees_manual,
+    errs_by_probe_manual,
+) = debug_manual_calibration(
+    manual_calibration_file, verbose=verbose, find_scaling=fit_scale
+)
+
+cal_by_probe = cal_by_probe_parallax.copy()
+cal_by_probe.update(cal_by_probe_manual)
 
 # %% [markdown]
 # ## Probe targets in manipulator coordinates
@@ -247,7 +229,7 @@ for probe, (target_name, overshoot) in targets_and_overshoots_by_probe.items():
         scale = scale_vecs[probe]
     else:
         scale = None
-    probe_target = rc.transform_reticle_to_probe(
+    probe_target = rc.transform_bregma_to_probe(
         target, rotations[probe], translations[probe], scale
     )
     probe_target_and_overshoot = probe_target + overshoot_arr
@@ -266,7 +248,7 @@ for probe, target in manual_bregma_targets_by_probe.items():
         scale = scale_vecs[probe]
     else:
         scale = None
-    probe_target = rc.transform_reticle_to_probe(
+    probe_target = rc.transform_bregma_to_probe(
         target_arr, rotations[probe], translations[probe], scale
     )
     target_rnd, probe_target_rnd = _round_targets(target_arr, probe_target)
