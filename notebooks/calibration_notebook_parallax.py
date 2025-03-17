@@ -205,7 +205,8 @@ print("Loading manual calibrations...")
     manual_calibration_file, verbose=verbose, find_scaling=fit_scale
 )
 
-cal_by_probe = {**}
+cal_by_probe = cal_by_probe_parallax.copy()
+cal_by_probe.update(cal_by_probe_manual)
 
 # %% [markdown]
 # ## Probe targets in manipulator coordinates
