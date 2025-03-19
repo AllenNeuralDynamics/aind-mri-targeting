@@ -47,18 +47,20 @@ import pandas as pd
 # %matplotlib inline
 from aind_mri_utils.reticle_calibrations import (
     debug_parallax_and_manual_calibrations,
+    debug_parallax_calibration,
     transform_bregma_to_probe,
     transform_probe_to_bregma,
 )
 
 logger = logging.getLogger(__name__)
 
-logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.DEBUG)
+logging.basicConfig(format="%(message)s", level=logging.DEBUG)
 # %%
 # Set file paths and mouse ID here
 
 # Calibration File with probe data
-mouse_id = "771432"
+mouse_id = "765861"
+reticle_used = "H"
 basepath = Path("/mnt/aind1-vast/scratch/")
 calibration_dir = (
     basepath / "ephys/persist/data/probe_calibrations/CSVCalibrations/"
@@ -68,12 +70,12 @@ calibration_dir = (
 target_dir = basepath / f"ephys/persist/data/MRI/processed/{mouse_id}/"
 # Calibration directories to use for parallax, with the latter ones taking
 # priority
-parallax_calibration_directories = ["log_20250311_110408"]
+parallax_calibration_directories = ["log_20250318_171550"]
 # Calibration files to use for manual calibration, with the latter ones taking
 # priority. All manual calibrations will take priority over parallax
 # calibrations
 manual_calibration_filenames = [
-    "calibration_info_np2_2024_08_05T14_34_00.xlsx"
+    "calibration_info_np2_2025_03_18T08_39_00.xlsx"
 ]
 # List of probes to ignore manual calibrations from
 probes_to_ignore_manual = []
@@ -97,6 +99,12 @@ save_path = None
 
 
 # %%
+# Reticle offsets and rotations
+reticle_offsets = {"H": np.array([0.076, 0.062, 0.311])}
+reticle_rotations = {"H": 0}
+
+
+# %%
 def _round_targets(target, probe_target):
     target_rnd = np.round(target, decimals=2)
     probe_target_and_overshoot_rnd = np.round(2000 * probe_target) / 2
@@ -110,7 +118,7 @@ target_df = target_df.set_index("point")
 # ## Transformed targets
 # print the transformed targets to see which targets are available
 # %%
-print(target_df)
+target_df
 
 # %% [markdown]
 # ## Configure experiment
@@ -164,18 +172,34 @@ manual_bregma_targets_by_probe = {
 # However, the scaling factor will have been applied.
 # %%
 # Calculate the rotation parameters
-(
-    combined_cal_by_probe,
-    R_reticle_to_bregma,
-    t_reticle_to_bregma,
-    combined_pairs_by_probe,
-    errs_by_probe,
-) = debug_parallax_and_manual_calibrations(
-    manual_calibration_paths,
-    parallax_calibration_paths,
-    probes_to_ignore_manual,
-    find_scaling=fit_scale,
-)
+reticle_offset = reticle_offsets[reticle_used]
+reticle_rotation = reticle_rotations[reticle_used]
+if len(manual_calibration_paths) > 0:
+    (
+        combined_cal_by_probe,
+        R_reticle_to_bregma,
+        t_reticle_to_bregma,
+        combined_pairs_by_probe,
+        errs_by_probe,
+    ) = debug_parallax_and_manual_calibrations(
+        manual_calibration_paths,
+        parallax_calibration_paths,
+        probes_to_ignore_manual,
+        find_scaling=fit_scale,
+    )
+else:
+    (
+        combined_cal_by_probe,
+        R_reticle_to_bregma,
+        combined_pairs_by_probe,
+        errs_by_probe,
+    ) = debug_parallax_calibration(
+        parallax_calibration_paths[0],
+        reticle_offset,
+        reticle_rotation,
+        find_scaling=fit_scale,
+    )
+    t_reticle_to_bregma = reticle_offset
 # %% [markdown]
 # ## Probe targets in manipulator coordinates
 # Get the transformed targets in manipulator coordinates using the fitted
