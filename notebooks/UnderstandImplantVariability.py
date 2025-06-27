@@ -6,7 +6,7 @@ import matplotlib
 import numpy as np
 import SimpleITK as sitk
 import trimesh
-from aind_mri_utils import coordinate_systems as cs
+from aind_anatomical_utils import coordinate_systems as cs
 from aind_mri_utils import rotations as rot
 from aind_mri_utils.chemical_shift import compute_chemical_shift
 from aind_mri_utils.file_io import simpleitk as mr_sitk
@@ -32,9 +32,7 @@ def sitk_to_trimesh_with_metadata(sitk_image):
     mask_array = sitk.GetArrayFromImage(sitk_image)
 
     # Step 2: Perform marching cubes to extract surface (in voxel space)
-    vertices, faces, normals, values = measure.marching_cubes(
-        mask_array, level=0.5
-    )
+    vertices, faces, normals, values = measure.marching_cubes(mask_array, level=0.5)
 
     # Step 3: Extract metadata (origin, spacing, direction)
     origin = np.array(sitk_image.GetOrigin())
@@ -87,9 +85,7 @@ chem_shift
 hole_folder = Path(r"Y:\ephys\persist\data\MRI\HeadframeModels") / "HoleOBJs"
 
 
-hole_files = [
-    x for x in os.listdir(hole_folder) if ".obj" in x and "Hole" in x
-]
+hole_files = [x for x in os.listdir(hole_folder) if ".obj" in x and "Hole" in x]
 hole_dict = {}
 for ii, flname in enumerate(hole_files):
     hole_num = int(flname.split("Hole")[-1].split(".")[0])
@@ -112,18 +108,14 @@ model_targets = np.vstack(list(model_implant_targets.values()))
 S = trimesh.Scene()
 
 implant_mesh = trimesh.load_mesh(
-    os.path.join(
-        r"Y:\ephys\persist\data\MRI\HeadframeModels", "0283-300-04.obj"
-    )
+    os.path.join(r"Y:\ephys\persist\data\MRI\HeadframeModels", "0283-300-04.obj")
 )
 implant_mesh.vertices = cs.convert_coordinate_system(
     implant_mesh.vertices, "ASR", "LPS"
 )
 
 headframe_mesh = trimesh.load_mesh(
-    os.path.join(
-        r"Y:\ephys\persist\data\MRI\HeadframeModels", "TenRunHeadframe.obj"
-    )
+    os.path.join(r"Y:\ephys\persist\data\MRI\HeadframeModels", "TenRunHeadframe.obj")
 )
 headframe_mesh.vertices = cs.convert_coordinate_system(
     headframe_mesh.vertices, "ASR", "LPS"
@@ -156,24 +148,17 @@ for ii, mouse in enumerate(dataloc.keys()):
         rot.prepare_data_for_homogeneous_transform(this_mesh.vertices)
         @ implant_model_trans
     )
-    this_mesh.vertices = rot.extract_data_for_homogeneous_transform(
-        tmp_ @ trans.T
-    )
+    this_mesh.vertices = rot.extract_data_for_homogeneous_transform(tmp_ @ trans.T)
     this_mesh.visual.vertex_colors = np.concatenate(
         [np.random.randint(0, 255, (3)), [125]]
     )
 
     tmp_ = (
-        rot.prepare_data_for_homogeneous_transform(model_targets)
-        @ implant_model_trans
+        rot.prepare_data_for_homogeneous_transform(model_targets) @ implant_model_trans
     )
-    hole_locs[mouse] = rot.extract_data_for_homogeneous_transform(
-        tmp_ @ trans.T
-    )
+    hole_locs[mouse] = rot.extract_data_for_homogeneous_transform(tmp_ @ trans.T)
 
-    sitk_image = sitk.ReadImage(
-        Path(dataloc[mouse]) / f"{mouse}_auto_skull_strip.nrrd"
-    )
+    sitk_image = sitk.ReadImage(Path(dataloc[mouse]) / f"{mouse}_auto_skull_strip.nrrd")
     brain = sitk_to_trimesh_with_metadata(sitk_image)
     brain.visual.face_colors = [0, 255, 0, 255]
     brain.vertices[:, 1] -= chem_shift
@@ -187,9 +172,7 @@ for ii, mouse in enumerate(dataloc.keys()):
             [hole_locs[mouse][ii, :], hole_locs[mouse][ii, :]],
             [[0, 0, 1], [0, 0, -1]],
         )
-        brain_bottom[mouse].append(
-            np.max(np.abs(intersect - hole_locs[mouse][ii, :]))
-        )
+        brain_bottom[mouse].append(np.max(np.abs(intersect - hole_locs[mouse][ii, :])))
 
     S.add_geometry(this_mesh)
     # S.add_geometry(brain)
@@ -241,9 +224,7 @@ sitk_image = sitk.ReadImage(
     r"Y:\ephys\persist\data\MRI\processed\738789\738789_auto_skull_strip.nrrd"
 )
 mask_array = sitk.GetArrayFromImage(sitk_image)
-vertices, faces, normals, values = measure.marching_cubes(
-    mask_array, level=0.5
-)
+vertices, faces, normals, values = measure.marching_cubes(mask_array, level=0.5)
 mesh = trimesh.Trimesh(
     vertices=vertices[:, [2, 1, 0]] * 0.1 + sitk_image.GetOrigin(), faces=faces
 )
