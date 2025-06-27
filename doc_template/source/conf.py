@@ -4,9 +4,10 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
 # -- Path Setup --------------------------------------------------------------
-from os.path import dirname, abspath
-from pathlib import Path
 from datetime import date
+from os.path import abspath, dirname
+from pathlib import Path
+
 from aind_mri_targeting import __version__ as package_version
 
 INSTITUTE_NAME = "Allen Institute for Neural Dynamics"
