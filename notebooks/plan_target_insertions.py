@@ -9,7 +9,7 @@ import SimpleITK as sitk
 import trimesh
 
 # Functions from aind_mri_utils
-from aind_mri_utils import coordinate_systems as cs
+from aind_anatomical_utils import coordinate_systems as cs
 from aind_mri_utils import rotations as rot
 from aind_mri_utils.arc_angles import calculate_arc_angles
 from aind_mri_utils.chemical_shift import (
@@ -33,9 +33,7 @@ if whoami == "galen":
     base_save_dir = Path("/home/galen.lynch/")
 elif whoami == "yoni":
     base_dir = Path("Y:/")
-    base_save_dir = Path(
-        "C:/Users/yoni.browning/OneDrive - Allen Institute/Desktop/"
-    )
+    base_save_dir = Path("C:/Users/yoni.browning/OneDrive - Allen Institute/Desktop/")
 else:
     raise ValueError("Who are you again?")
 
@@ -43,59 +41,41 @@ headframe_model_dir = base_dir / "ephys/persist/data/MRI/HeadframeModels/"
 probe_model_file = (
     headframe_model_dir / "dovetailtweezer_oneShank_centered_corrected.obj"
 )  # "modified_probe_holder.obj"
-annotations_path = base_dir / "ephys/persist/data/MRI/processed/{}/".format(
-    mouse
-)
+annotations_path = base_dir / "ephys/persist/data/MRI/processed/{}/".format(mouse)
 
 headframe_path = headframe_model_dir / "TenRunHeadframe.obj"
 holes_path = headframe_model_dir / "OneOff_HolesOnly.obj"
 
 
-implant_holes_path = str(
-    annotations_path / "{}_ImplantHoles.seg.nrrd".format(mouse)
-)
+implant_holes_path = str(annotations_path / "{}_ImplantHoles.seg.nrrd".format(mouse))
 
-image_path = str(
-    annotations_path / "{}_100.nii.gz".format(mouse)
-)  # '_100.nii.gz'))
+image_path = str(annotations_path / "{}_100.nii.gz".format(mouse))  # '_100.nii.gz'))
 labels_path = str(
     annotations_path / "{}_HeadframeHoles.seg.nrrd".format(mouse)
 )  # 'Segmentation.seg.nrrd')#
-brain_mask_path = str(
-    annotations_path / ("{}_auto_skull_strip.nrrd".format(mouse))
-)
-manual_annotation_path = str(
-    annotations_path / (f"{mouse}_ManualAnnotations.fcsv")
-)
+brain_mask_path = str(annotations_path / ("{}_auto_skull_strip.nrrd".format(mouse)))
+manual_annotation_path = str(annotations_path / (f"{mouse}_ManualAnnotations.fcsv"))
 cone_path = (
     base_dir
     / "ephys/persist/Software/PinpointBuilds/WavefrontFiles/Cone_0160-200-53.obj"  # noqa E501
 )
 
-uw_yoni_annotation_path = (
-    annotations_path / f"targets-{mouse}-transformed.fcsv"
-)
+uw_yoni_annotation_path = annotations_path / f"targets-{mouse}-transformed.fcsv"
 
 newscale_file_name = headframe_path / "Centered_Newscale_2pt0.obj"
 #
 
 
 calibration_filename = "calibration_info_np2_2024_04_22T11_15_00.xlsx"
-calibration_dir = (
-    base_dir / "ephys/persist/data/probe_calibrations/CSVCalibrations/"
-)
+calibration_dir = base_dir / "ephys/persist/data/probe_calibrations/CSVCalibrations/"
 calibration_file = calibration_dir / calibration_filename
 measured_hole_centers = annotations_path / "measured_hole_centers.xlsx"
 
 
 # manual_hole_centers_file = annotations_path / 'hole_centers.mrk.json'
 
-transformed_targets_save_path = annotations_path / (
-    mouse + "TransformedTargets.csv"
-)
-test_probe_translation_save_path = str(
-    base_save_dir / "test_probe_translation.h5"
-)
+transformed_targets_save_path = annotations_path / (mouse + "TransformedTargets.csv")
+test_probe_translation_save_path = str(base_save_dir / "test_probe_translation.h5")
 transform_filename = str(annotations_path / (mouse + "_com_plane.h5"))
 # Magic numbers
 resolution = 100
@@ -105,9 +85,7 @@ resolution = 100
 # Handle inconsistant labeling
 label_vol = sitk.ReadImage(labels_path)
 odict = {k: label_vol.GetMetaData(k) for k in label_vol.GetMetaDataKeys()}
-insert_underscores = (
-    "_" in list(sf.find_seg_nrrd_header_segment_info(odict).keys())[0]
-)
+insert_underscores = "_" in list(sf.find_seg_nrrd_header_segment_info(odict).keys())[0]
 
 # Load the points on the headframe lines.
 pts1, pts2, order = get_headframe_hole_lines(
@@ -141,16 +119,14 @@ brain_pos = np.vstack(
         for ii in range(idx.shape[0])
     ]
 )
-brain_pos = brain_pos[
-    np.arange(0, brain_pos.shape[0], brain_pos.shape[0] // 1000)
-]
+brain_pos = brain_pos[np.arange(0, brain_pos.shape[0], brain_pos.shape[0] // 1000)]
 
 
 # %%
 # Load the computed transform
-trans = mr_sitk.load_sitk_transform(
-    transform_filename, homogeneous=True, invert=True
-)[0]
+trans = mr_sitk.load_sitk_transform(transform_filename, homogeneous=True, invert=True)[
+    0
+]
 
 # Get chemical shift from MRI image.
 # Defaults are standard UW scans- set params for anything else.
@@ -276,9 +252,7 @@ ML_Range = []
 TARGET_LOC = []
 for tt in range(transformed_preferred.shape[0]):
     for hh in range(transformed_implant.shape[0]):
-        insertion_vector = (
-            transformed_implant[hh, :] - transformed_preferred[tt, :]
-        )
+        insertion_vector = transformed_implant[hh, :] - transformed_preferred[tt, :]
         ap, ml = calculate_arc_angles(
             transformed_preferred[tt, :],
             transformed_implant[hh, :],
@@ -289,15 +263,12 @@ for tt in range(transformed_preferred.shape[0]):
         theta = np.deg2rad(np.arange(0, 360, 1))
         a = transformed_implant[hh, 0] + radius * np.cos(theta)
         b = transformed_implant[hh, 1] + radius * np.sin(theta)
-        circle = np.vstack(
-            [a, b, np.ones(b.shape) * transformed_implant[hh, 2]]
-        ).T
+        circle = np.vstack([a, b, np.ones(b.shape) * transformed_implant[hh, 2]]).T
 
         this_ML = []
         this_AP = []
 
         for jj in range(len(a)):
-
             this_ap, this_ml = calculate_arc_angles(
                 transformed_preferred[tt, :], circle[jj, :], ap_offset=0
             )
@@ -367,7 +338,6 @@ for ii, row1 in df.iterrows():
         elif (np.abs(row1.ap - row2.ap) < ap_min) and (
             np.abs(row1.ap - row2.ap) > ap_wiggle
         ):
-
             continue
         else:
             valid[ii, jj] = True
@@ -418,8 +388,7 @@ S = trimesh.scene.Scene([new_mesh])
 S.add_geometry(cone)
 
 meshes = [
-    trimesh.creation.uv_sphere(radius=0.25)
-    for i in range(len(transformed_implant))
+    trimesh.creation.uv_sphere(radius=0.25) for i in range(len(transformed_implant))
 ]
 for i, m in enumerate(meshes):
     m.apply_translation(transformed_implant[i, :])
@@ -427,8 +396,7 @@ for i, m in enumerate(meshes):
     S.add_geometry(m)
 
 meshes = [
-    trimesh.creation.uv_sphere(radius=0.25)
-    for i in range(len(transformed_preferred))
+    trimesh.creation.uv_sphere(radius=0.25) for i in range(len(transformed_preferred))
 ]
 for i, m in enumerate(meshes):
     m.apply_translation(transformed_preferred[i, :])
@@ -475,7 +443,6 @@ new_mesh.faces = headframe_faces
 insert_list = match_insertions
 
 for this_angle in angle_sets:
-
     for this_insertion in range(len(match_insertions)):
         # Mesh1
         this_mesh = mesh.copy()
@@ -529,8 +496,7 @@ for this_insertion in range(len(match_insertions)):
 
 
 meshes = [
-    trimesh.creation.uv_sphere(radius=0.25)
-    for i in range(len(transformed_implant))
+    trimesh.creation.uv_sphere(radius=0.25) for i in range(len(transformed_implant))
 ]
 for i, m in enumerate(meshes):
     m.apply_translation(transformed_implant[i, :])
@@ -538,8 +504,7 @@ for i, m in enumerate(meshes):
     S.add_geometry(m)
 
 meshes = [
-    trimesh.creation.uv_sphere(radius=0.25)
-    for i in range(len(transformed_preferred))
+    trimesh.creation.uv_sphere(radius=0.25) for i in range(len(transformed_preferred))
 ]
 for i, m in enumerate(meshes):
     m.apply_translation(transformed_preferred[i, :])

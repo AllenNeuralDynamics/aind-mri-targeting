@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import SimpleITK as sitk
 import trimesh
-from aind_mri_utils import coordinate_systems as cs
+from aind_anatomical_utils import coordinate_systems as cs
 from aind_mri_utils import rotations as rot
 from aind_mri_utils.arc_angles import transform_matrix_from_angles_and_target
 from aind_mri_utils.chemical_shift import (
@@ -43,9 +43,7 @@ if whoami == "galen":
     base_save_dir = Path("/home/galen.lynch/")
 elif whoami == "yoni":
     base_dir = Path("Y:/")
-    base_save_dir = Path(
-        "C:/Users/yoni.browning/OneDrive - Allen Institute/Desktop/"
-    )
+    base_save_dir = Path("C:/Users/yoni.browning/OneDrive - Allen Institute/Desktop/")
 else:
     raise ValueError("Who are you again?")
 
@@ -53,8 +51,8 @@ headframe_model_dir = base_dir / "ephys/persist/data/MRI/HeadframeModels/"
 probe_model_file = (
     headframe_model_dir / "dovetailtweezer_oneShank_centered_corrected.obj"
 )  # "modified_probe_holder.obj"
-annotations_path = (
-    base_dir / "ephys/persist/data/MRI/processed/{}/UW_2025".format(mouse)
+annotations_path = base_dir / "ephys/persist/data/MRI/processed/{}/UW_2025".format(
+    mouse
 )
 
 hole_folder = headframe_model_dir / "HoleOBJs"
@@ -65,19 +63,13 @@ headframe_path = headframe_model_dir / "TenRunHeadframe.obj"
 holes_path = headframe_model_dir / "OneOff_HolesOnly.obj"
 
 
-implant_holes_path = str(
-    annotations_path / "{}_ImplantHoles.seg.nrrd".format(mouse)
-)
+implant_holes_path = str(annotations_path / "{}_ImplantHoles.seg.nrrd".format(mouse))
 
-image_path = str(
-    annotations_path / "{}_100.nii.gz".format(mouse)
-)  # '_100.nii.gz'))
+image_path = str(annotations_path / "{}_100.nii.gz".format(mouse))  # '_100.nii.gz'))
 labels_path = str(
     annotations_path / "{}_HeadframeHoles.seg.nrrd".format(mouse)
 )  # 'Segmentation.seg.nrrd')#
-brain_mask_path = str(
-    annotations_path / ("{}_auto_skull_strip.nrrd".format(mouse))
-)
+brain_mask_path = str(annotations_path / ("{}_auto_skull_strip.nrrd".format(mouse)))
 
 template_annotation_path = str(
     annotations_path / ("fiducials-{}-transformed.fcsv".format(mouse))
@@ -95,21 +87,15 @@ newscale_file_name = headframe_path / "Centered_Newscale_2pt0.obj"
 #
 
 
-calibration_dir = (
-    base_dir / "ephys/persist/data/probe_calibrations/CSVCalibrations/"
-)
+calibration_dir = base_dir / "ephys/persist/data/probe_calibrations/CSVCalibrations/"
 measured_hole_centers = None
 # (  annotations_path / f"{mouse}_measured_hole_centers.xlsx"  )
 
 
 # manual_hole_centers_file = annotations_path / 'hole_centers.mrk.json'
 
-transformed_targets_save_path = annotations_path / (
-    f"{mouse}_TransformedTargets.csv"
-)
-test_probe_translation_save_path = str(
-    base_save_dir / "test_probe_translation.h5"
-)
+transformed_targets_save_path = annotations_path / (f"{mouse}_TransformedTargets.csv")
+test_probe_translation_save_path = str(base_save_dir / "test_probe_translation.h5")
 transform_filename = str(annotations_path / ("com_plane.h5"))
 
 # %%
@@ -127,14 +113,10 @@ headframe_lps = cs.convert_coordinate_system(
 )  # Preserves shape!
 
 implant, implant_faces = get_vertices_and_faces(implant_model_path)
-implant_lps = cs.convert_coordinate_system(
-    implant, "ASR", "LPS"
-)  # Preserves shape!
+implant_lps = cs.convert_coordinate_system(implant, "ASR", "LPS")  # Preserves shape!
 
 # Load the computed transform
-trans = load_sitk_transform(transform_filename, homogeneous=True, invert=True)[
-    0
-]
+trans = load_sitk_transform(transform_filename, homogeneous=True, invert=True)[0]
 
 cone = trimesh.load_mesh(cone_path)
 cone.vertices = cs.convert_coordinate_system(cone.vertices, "ASR", "LPS")
@@ -165,9 +147,7 @@ target_names = tuple(preferred_pts.keys())
 # %%
 # Get the trimesh objects for each hole.
 # These are made using blender from the cad file
-hole_files = [
-    x for x in os.listdir(hole_folder) if ".obj" in x and "Hole" in x
-]
+hole_files = [x for x in os.listdir(hole_folder) if ".obj" in x and "Hole" in x]
 hole_dict = {}
 for ii, flname in enumerate(hole_files):
     hole_num = int(flname.split("Hole")[-1].split(".")[0])
@@ -202,8 +182,7 @@ implant_model_trans = load_sitk_transform(
 implant_names = list(model_implant_targets.keys())
 model_targets = np.vstack(list(model_implant_targets.values()))
 implant_targets = (
-    rot.prepare_data_for_homogeneous_transform(model_targets)
-    @ implant_model_trans.T
+    rot.prepare_data_for_homogeneous_transform(model_targets) @ implant_model_trans.T
 )
 transformed_implant = rot.extract_data_for_homogeneous_transform(
     implant_targets @ trans.T
@@ -289,19 +268,14 @@ annotation_data = []
 for i, n in enumerate(target_names):
     target = {
         "point": n,
-        **{
-            d: transformed_annotation_ras[i, j]
-            for j, d in enumerate(dim_names)
-        },
+        **{d: transformed_annotation_ras[i, j] for j, d in enumerate(dim_names)},
         "point source": "Fiducial From Template",
     }
     annotation_data.append(target)
 
 sp = np.argsort(implant_names)
 implant_names_sorted = np.array(implant_names)[sp]
-transformed_implant_sorted_ras = (
-    np.array([-1, -1, 1]) * transformed_implant[sp, :]
-)
+transformed_implant_sorted_ras = np.array([-1, -1, 1]) * transformed_implant[sp, :]
 implant_data = []
 for i, n in enumerate(implant_names_sorted):
     if n in hole_measures_ras:
@@ -362,9 +336,7 @@ seed_insertions = [
 bad_holes = [0, 1, 2, 3]
 good_holes_mask = np.logical_not(np.isin(df.hole.to_numpy(), bad_holes))
 target_mask = np.logical_not(
-    np.isin(
-        df.target.to_numpy(), np.array(["AntComMid", "CCant", "GenFacCran2"])
-    )
+    np.isin(df.target.to_numpy(), np.array(["AntComMid", "CCant", "GenFacCran2"]))
 )
 consider_mask = np.logical_and(good_holes_mask, target_mask)
 considered_ndxs = np.nonzero(consider_mask)[0]
@@ -429,13 +401,8 @@ CM = trimesh.collision.CollisionManager()
 
 
 implant, implant_faces = get_vertices_and_faces(implant_model_path)
-implant_lps = cs.convert_coordinate_system(
-    implant, "ASR", "LPS"
-)  # Preserves shape!
-implant_ = (
-    rot.prepare_data_for_homogeneous_transform(implant_lps)
-    @ implant_model_trans
-)
+implant_lps = cs.convert_coordinate_system(implant, "ASR", "LPS")  # Preserves shape!
+implant_ = rot.prepare_data_for_homogeneous_transform(implant_lps) @ implant_model_trans
 implant_verts = rot.extract_data_for_homogeneous_transform(implant_ @ trans.T)
 implant_mesh = trimesh.Trimesh()
 implant_mesh.vertices = implant_verts
@@ -445,7 +412,6 @@ implant_mesh.visual.vertex_colors = [0, 0, 255, 255 // 3]
 insert_list = seed_insertions
 
 for this_angle in angle_sets:
-
     for this_insertion in range(len(seed_insertions)):
         # Mesh1
         this_mesh = mesh.copy()
@@ -537,8 +503,7 @@ for this_insertion in range(len(seed_insertions)):
 
 
 meshes = [
-    trimesh.creation.uv_sphere(radius=0.1)
-    for i in range(len(transformed_implant))
+    trimesh.creation.uv_sphere(radius=0.1) for i in range(len(transformed_implant))
 ]
 for i, m in enumerate(meshes):
     m.apply_translation(transformed_implant[i, :])
@@ -546,8 +511,7 @@ for i, m in enumerate(meshes):
     S.add_geometry(m)
 
 meshes = [
-    trimesh.creation.uv_sphere(radius=0.25)
-    for i in range(len(transformed_implant_vol))
+    trimesh.creation.uv_sphere(radius=0.25) for i in range(len(transformed_implant_vol))
 ]
 for i, m in enumerate(meshes):
     m.apply_translation(transformed_implant_vol[i, :])
@@ -555,8 +519,7 @@ for i, m in enumerate(meshes):
     S.add_geometry(m)
 
 meshes = [
-    trimesh.creation.uv_sphere(radius=0.25)
-    for i in range(len(transformed_annotation))
+    trimesh.creation.uv_sphere(radius=0.25) for i in range(len(transformed_annotation))
 ]
 for i, m in enumerate(meshes):
     m.apply_translation(transformed_annotation[i, :])

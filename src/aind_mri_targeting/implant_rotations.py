@@ -5,7 +5,7 @@ from pathlib import Path
 
 import SimpleITK as sitk
 import trimesh
-from aind_mri_utils import coordinate_systems as cs
+from aind_anatomical_utils import coordinate_systems as cs
 from aind_mri_utils.implant import fit_implant_to_mri, make_hole_seg_dict
 from aind_mri_utils.rotations import rotation_matrix_to_sitk
 
