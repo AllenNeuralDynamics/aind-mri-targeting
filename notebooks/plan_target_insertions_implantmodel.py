@@ -9,13 +9,13 @@ import pandas as pd
 import SimpleITK as sitk
 import trimesh
 from aind_anatomical_utils import coordinate_systems as cs
+from aind_anatomical_utils import slicer as sf
 from aind_mri_utils import rotations as rot
 from aind_mri_utils.arc_angles import transform_matrix_from_angles_and_target
 from aind_mri_utils.chemical_shift import (
     chemical_shift_transform,
     compute_chemical_shift,
 )
-from aind_mri_utils.file_io import slicer_files as sf
 from aind_mri_utils.file_io.obj_files import get_vertices_and_faces
 from aind_mri_utils.file_io.simpleitk import load_sitk_transform
 from aind_mri_utils.meshes import (

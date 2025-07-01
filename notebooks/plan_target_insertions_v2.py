@@ -6,13 +6,13 @@ import pandas as pd
 import SimpleITK as sitk
 import trimesh
 from aind_anatomical_utils import coordinate_systems as cs
+from aind_anatomical_utils import slicer as sf
 from aind_mri_utils import rotations as rot
 from aind_mri_utils.chemical_shift import (
     chemical_shift_transform,
     compute_chemical_shift,
 )
 from aind_mri_utils.file_io import simpleitk as mr_sitk
-from aind_mri_utils.file_io import slicer_files as sf
 from aind_mri_utils.file_io.obj_files import get_vertices_and_faces
 from aind_mri_utils.meshes import load_newscale_trimesh
 from aind_mri_utils.planning import (

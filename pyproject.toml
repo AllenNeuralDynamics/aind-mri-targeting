@@ -17,7 +17,7 @@ readme = "README.md"
 dynamic = ["version"]
 
 dependencies = [
-  "aind-anatomical-utils>=0.0.1, <0.1",
+  "aind-anatomical-utils>=0.1, <0.2",
   'aind_mri_utils >=0.2.1, <2',
   'numpy >=1.20, <3',
   'pynrrd >=1, <2',
