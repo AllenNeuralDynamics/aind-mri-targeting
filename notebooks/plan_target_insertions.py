@@ -10,6 +10,7 @@ import trimesh
 
 # Functions from aind_mri_utils
 from aind_anatomical_utils import coordinate_systems as cs
+from aind_anatomical_utils import slicer as sf
 from aind_mri_utils import rotations as rot
 from aind_mri_utils.arc_angles import calculate_arc_angles
 from aind_mri_utils.chemical_shift import (
@@ -17,7 +18,6 @@ from aind_mri_utils.chemical_shift import (
     compute_chemical_shift,
 )
 from aind_mri_utils.file_io import simpleitk as mr_sitk
-from aind_mri_utils.file_io import slicer_files as sf
 from aind_mri_utils.file_io.obj_files import get_vertices_and_faces
 from aind_mri_utils.meshes import load_newscale_trimesh
 from aind_mri_utils.optimization import get_headframe_hole_lines
