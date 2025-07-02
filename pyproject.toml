@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "aind-mri-targeting"
 description = "Tools to plan and execute MRI-guided targeting experiments"
 license = { text = "MIT" }
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 authors = [
   { name = "Allen Institute for Neural Dynamics" },
   { name = "Galen Lynch", email = "galen@galenlynch.com" },
@@ -55,7 +55,7 @@ readme = { file = "README.md", content-type = "text/markdown" }
 
 [tool.ruff]
 line-length = 120
-target-version = 'py311'
+target-version = 'py39'
 
 [tool.ruff.lint]
 extend-select = ['Q', 'RUF100', 'C90', 'I']
