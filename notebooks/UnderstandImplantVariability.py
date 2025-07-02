@@ -131,7 +131,7 @@ for ii, mouse in enumerate(dataloc.keys()):
 
     implant_transform = str(
         implant_alignment_path
-        / f"{mouse}_implant_annotations_to_lps_implant_model_with_brain_better_normalization.h5"  # noqa E501
+        / f"{mouse}_implant_annotations_to_lps_implant_model_with_brain_better_normalization.h5"
     )
     implant_model_trans = mr_sitk.load_sitk_transform(
         implant_transform, homogeneous=True, invert=False

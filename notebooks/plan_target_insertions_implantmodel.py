@@ -57,7 +57,7 @@ annotations_path = base_dir / "ephys/persist/data/MRI/processed/{}/UW_2025".form
 
 hole_folder = headframe_model_dir / "HoleOBJs"
 implant_model_path = headframe_model_dir / "0283-300-04.obj"
-implant_transform = annotations_path / f"{mouse}_implant_fit.h5"  # noqa E501
+implant_transform = annotations_path / f"{mouse}_implant_fit.h5"
 
 headframe_path = headframe_model_dir / "TenRunHeadframe.obj"
 holes_path = headframe_model_dir / "OneOff_HolesOnly.obj"
@@ -76,7 +76,7 @@ template_annotation_path = str(
 )
 cone_path = (
     base_dir
-    / "ephys/persist/Software/PinpointBuilds/WavefrontFiles/Cone_0160-200-53.obj"  # noqa E501
+    / "ephys/persist/Software/PinpointBuilds/WavefrontFiles/Cone_0160-200-53.obj"
 )
 
 # uw_yoni_annotation_path = (

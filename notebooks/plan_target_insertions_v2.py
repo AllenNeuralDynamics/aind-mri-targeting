@@ -55,7 +55,7 @@ brain_mask_path = str(annotations_path / ("{}_auto_skull_strip.nrrd".format(mous
 manual_annotation_path = str(annotations_path / (f"{mouse}_ManualAnnotations.fcsv"))
 cone_path = (
     base_dir
-    / "ephys/persist/Software/PinpointBuilds/WavefrontFiles/Cone_0160-200-53.obj"  # noqa E501
+    / "ephys/persist/Software/PinpointBuilds/WavefrontFiles/Cone_0160-200-53.obj"
 )
 
 uw_yoni_annotation_path = annotations_path / f"targets-{mouse}-transformed.fcsv"
