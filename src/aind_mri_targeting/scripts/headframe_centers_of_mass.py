@@ -8,16 +8,12 @@ from .. import headframe_rotations as hr
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Calculate the center of mass of the headframes"
-    )
+    parser = argparse.ArgumentParser(description="Calculate the center of mass of the headframes")
     parser.add_argument("mri", help="path to the MRI file")
     parser.add_argument("segmentation", help="path to the segmentation file")
     parser.add_argument("output", nargs="?", help="path to the output file")
     parser.add_argument("-m", "--mouse", default=None, help="mouse ID")
-    parser.add_argument(
-        "-s", "--segment_format", default=None, help="segment name format"
-    )
+    parser.add_argument("-s", "--segment_format", default=None, help="segment name format")
     parser.add_argument(
         "-f",
         "--force",

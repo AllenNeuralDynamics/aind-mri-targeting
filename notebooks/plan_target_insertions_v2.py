@@ -48,15 +48,10 @@ holes_path = headframe_model_dir / "OneOff_HolesOnly.obj"
 implant_holes_path = str(annotations_path / "{}_ImplantHoles.seg.nrrd".format(mouse))
 
 image_path = str(annotations_path / "{}_100.nii.gz".format(mouse))  # '_100.nii.gz'))
-labels_path = str(
-    annotations_path / "{}_HeadframeHoles.seg.nrrd".format(mouse)
-)  # 'Segmentation.seg.nrrd')#
+labels_path = str(annotations_path / "{}_HeadframeHoles.seg.nrrd".format(mouse))  # 'Segmentation.seg.nrrd')#
 brain_mask_path = str(annotations_path / ("{}_auto_skull_strip.nrrd".format(mouse)))
 manual_annotation_path = str(annotations_path / (f"{mouse}_ManualAnnotations.fcsv"))
-cone_path = (
-    base_dir
-    / "ephys/persist/Software/PinpointBuilds/WavefrontFiles/Cone_0160-200-53.obj"
-)
+cone_path = base_dir / "ephys/persist/Software/PinpointBuilds/WavefrontFiles/Cone_0160-200-53.obj"
 
 uw_yoni_annotation_path = annotations_path / f"targets-{mouse}-transformed.fcsv"
 
@@ -86,14 +81,10 @@ manual_annotation = sf.read_slicer_fcsv(manual_annotation_path)
 
 # Load the headframe
 headframe, headframe_faces = get_vertices_and_faces(headframe_path)
-headframe_lps = cs.convert_coordinate_system(
-    headframe, "ASR", "LPS"
-)  # Preserves shape!
+headframe_lps = cs.convert_coordinate_system(headframe, "ASR", "LPS")  # Preserves shape!
 
 # Load the computed transform
-trans = mr_sitk.load_sitk_transform(transform_filename, homogeneous=True, invert=True)[
-    0
-]
+trans = mr_sitk.load_sitk_transform(transform_filename, homogeneous=True, invert=True)[0]
 
 cone = trimesh.load_mesh(cone_path)
 cone.vertices = cs.convert_coordinate_system(cone.vertices, "ASR", "LPS")
@@ -111,13 +102,9 @@ if target_structures is None:
     target_structures = list(manual_annotation.keys())
 preferred_pts = {k: manual_annotation[k] for k in target_structures}
 
-hmg_pts = rot.prepare_data_for_homogeneous_transform(
-    np.array(tuple(preferred_pts.values()))
-)
+hmg_pts = rot.prepare_data_for_homogeneous_transform(np.array(tuple(preferred_pts.values())))
 chem_shift_annotation = hmg_pts @ chem_shift_trans.T @ trans.T
-transformed_annotation = rot.extract_data_for_homogeneous_transform(
-    chem_shift_annotation
-)
+transformed_annotation = rot.extract_data_for_homogeneous_transform(chem_shift_annotation)
 target_names = tuple(preferred_pts.keys())
 
 
@@ -130,12 +117,8 @@ implant_targets, implant_names = get_implant_targets(implant_vol)
 
 # Visualize Holes, list locations
 
-transformed_implant_homog = (
-    rot.prepare_data_for_homogeneous_transform(implant_targets) @ trans.T
-)
-transformed_implant = rot.extract_data_for_homogeneous_transform(
-    transformed_implant_homog
-)
+transformed_implant_homog = rot.prepare_data_for_homogeneous_transform(implant_targets) @ trans.T
+transformed_implant = rot.extract_data_for_homogeneous_transform(transformed_implant_homog)
 
 
 # %%
@@ -184,9 +167,7 @@ print(df.iloc[consider_ndxs])
 # %%
 nonbad_ndxs = np.nonzero(np.logical_not(bad_mask))[0]
 seed_insertions = [48]
-compatible_insertions = find_other_compatible_insertions(
-    compat_matrix, nonbad_ndxs, seed_insertions
-)
+compatible_insertions = find_other_compatible_insertions(compat_matrix, nonbad_ndxs, seed_insertions)
 df.loc[np.concatenate([seed_insertions, compatible_insertions])]
 
 

@@ -62,9 +62,7 @@ logging.basicConfig(format="%(message)s", level=logging.DEBUG)
 mouse_id = "765861"
 reticle_used = "H"
 basepath = Path("/mnt/aind1-vast/scratch/")
-calibration_dir = (
-    basepath / "ephys/persist/data/probe_calibrations/CSVCalibrations/"
-)
+calibration_dir = basepath / "ephys/persist/data/probe_calibrations/CSVCalibrations/"
 
 # Target file with transformed targets
 target_dir = basepath / f"ephys/persist/data/MRI/processed/{mouse_id}/"
@@ -74,19 +72,13 @@ parallax_calibration_directories = ["log_20250318_171550"]
 # Calibration files to use for manual calibration, with the latter ones taking
 # priority. All manual calibrations will take priority over parallax
 # calibrations
-manual_calibration_filenames = [
-    "calibration_info_np2_2025_03_18T08_39_00.xlsx"
-]
+manual_calibration_filenames = ["calibration_info_np2_2025_03_18T08_39_00.xlsx"]
 # List of probes to ignore manual calibrations from
 probes_to_ignore_manual = []
 target_file = target_dir / f"{mouse_id}_TransformedTargets.csv"
 
-parallax_calibration_paths = [
-    calibration_dir / f for f in parallax_calibration_directories
-]
-manual_calibration_paths = [
-    calibration_dir / f for f in manual_calibration_filenames
-]
+parallax_calibration_paths = [calibration_dir / f for f in parallax_calibration_directories]
+manual_calibration_paths = [calibration_dir / f for f in manual_calibration_filenames]
 
 # Whether to fit the scale parameters as well. Does not guarantee that the
 # error will be lower. If you have only a few data points, try setting this to
@@ -247,12 +239,8 @@ for probe, (
     R, t, _ = combined_cal_by_probe[probe]
     probe_target = transform_bregma_to_probe(target, R, t)
     probe_target_and_overshoot = probe_target + overshoot
-    target_rnd, probe_target_and_overshoot_rnd = _round_targets(
-        target, probe_target_and_overshoot
-    )
-    final_target_bregma = np.round(
-        transform_probe_to_bregma(probe_target_and_overshoot, R, t), 3
-    )
+    target_rnd, probe_target_and_overshoot_rnd = _round_targets(target, probe_target_and_overshoot)
+    final_target_bregma = np.round(transform_probe_to_bregma(probe_target_and_overshoot, R, t), 3)
     for dim, dim_val in zip(dims, final_target_bregma):
         cols.setdefault(dim, []).append(np.round(dim_val, 3))
     for dim, dim_val in zip(zaber_dims, probe_target_and_overshoot_rnd):

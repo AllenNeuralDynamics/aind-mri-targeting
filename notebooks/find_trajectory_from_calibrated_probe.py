@@ -38,15 +38,10 @@ holes_path = headframe_model_dir / "OneOff_HolesOnly.obj"
 implant_holes_path = str(annotations_path / "{}_ImplantHoles.seg.nrrd".format(mouse))
 
 image_path = str(annotations_path / "{}_100.nii.gz".format(mouse))  # '_100.nii.gz'))
-labels_path = str(
-    annotations_path / "{}_HeadframeHoles.seg.nrrd".format(mouse)
-)  # 'Segmentation.seg.nrrd')#
+labels_path = str(annotations_path / "{}_HeadframeHoles.seg.nrrd".format(mouse))  # 'Segmentation.seg.nrrd')#
 brain_mask_path = str(annotations_path / ("{}_auto_skull_strip.nrrd".format(mouse)))
 manual_annotation_path = str(annotations_path / (f"{mouse}_ManualAnnotations.fcsv"))
-cone_path = (
-    base_dir
-    / "ephys/persist/Software/PinpointBuilds/WavefrontFiles/Cone_0160-200-53.obj"
-)
+cone_path = base_dir / "ephys/persist/Software/PinpointBuilds/WavefrontFiles/Cone_0160-200-53.obj"
 
 uw_yoni_annotation_path = annotations_path / f"targets-{mouse}-transformed.fcsv"
 
@@ -133,9 +128,7 @@ for probe in measurements:
 # %%
 manual_annotation = sf.read_slicer_fcsv(manual_annotation_path)
 image = sitk.ReadImage(image_path)
-trans = mr_sitk.load_sitk_transform(transform_filename, homogeneous=True, invert=True)[
-    0
-]
+trans = mr_sitk.load_sitk_transform(transform_filename, homogeneous=True, invert=True)[0]
 
 
 # %%
@@ -146,13 +139,9 @@ chem_shift_trans = chemical_shift_transform(chem_shift, readout="HF")
 # List targeted locations
 preferred_pts = {k[1]: manual_annotation[k[1]] for k in target_structure_pair}
 
-hmg_pts = rot.prepare_data_for_homogeneous_transform(
-    np.array(tuple(preferred_pts.values()))
-)
+hmg_pts = rot.prepare_data_for_homogeneous_transform(np.array(tuple(preferred_pts.values())))
 chem_shift_annotation = hmg_pts @ trans.T @ chem_shift_trans.T
-transformed_annotation = rot.extract_data_for_homogeneous_transform(
-    chem_shift_annotation
-)
+transformed_annotation = rot.extract_data_for_homogeneous_transform(chem_shift_annotation)
 target_names = tuple(preferred_pts.keys())
 
 # %%
