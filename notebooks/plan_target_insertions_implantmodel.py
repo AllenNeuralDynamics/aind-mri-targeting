@@ -403,7 +403,7 @@ for this_angle in angle_sets:
         CM_headframe.add_object("headframe", new_mesh)
         CM_cone = trimesh.collision.CollisionManager()
         CM_cone.add_object("cone", cone)
-        # Do secondary checks for collisons
+        # Do secondary checks for collisions
         for this_insertion in range(len(seed_insertions)):
             # Mesh1
             this_mesh = mesh.copy()
