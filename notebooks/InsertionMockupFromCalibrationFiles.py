@@ -57,7 +57,7 @@ from scipy.spatial.transform import Rotation
 logging.basicConfig(format="%(message)s", level=logging.DEBUG)
 # %%
 # File Paths
-mouse = "765861"
+mouse = "786866"
 reticle_used = "H"
 target_structures = ["PL", "CLA", "MD", "CA1", "VM", "BLA", "RSP"]
 
@@ -72,7 +72,9 @@ else:
 
 # File Paths
 # Image and image annotations.
-annotations_path = base_path / "ephys/persist/data/MRI/processed/{}".format(mouse)
+annotations_path = base_path / "ephys/persist/data/MRI/processed/{}".format(
+    mouse
+)
 image_path = annotations_path / "{}_100.nii.gz".format(mouse)
 labels_path = annotations_path / "{}_HeadframeHoles.seg.nrrd".format(mouse)
 brain_mask_path = annotations_path / "{}_manual_skull_strip.nrrd".format(mouse)
@@ -82,37 +84,41 @@ structure_files = {
     structure: structure_mask_path / f"{mouse}{structure}Mask.obj"
     for structure in target_structures
 }
-brain_mesh_path = structure_mask_path / "{}_manual_skull_strip.obj".format(mouse)
+brain_mesh_path = structure_mask_path / "{}_manual_skull_strip.obj".format(
+    mouse
+)
 
 # Implant annotation
 # Note that this can be different than the image annotation,
 # this is in the event that an instion is planned with data from multiple scans
 # (see 750107 for example).
-implant_annoation_path = base_path / "ephys/persist/data/MRI/processed/{}".format(mouse)
+implant_annoation_path = (
+    base_path / "ephys/persist/data/MRI/processed/{}".format(mouse)
+)
 headframe_transform_file = implant_annoation_path / "com_plane.h5"
-implant_file = implant_annoation_path / "{}_ImplantHoles.seg.nrrd".format(mouse)
-implant_mesh_file = implant_annoation_path / "{}_ImplantHoles.obj".format(mouse)
-implant_fit_transform_file = implant_annoation_path / "{}_implant_fit.h5".format(mouse)
+implant_file = implant_annoation_path / "{}_ImplantHoles.seg.nrrd".format(
+    mouse
+)
+implant_mesh_file = implant_annoation_path / "{}_ImplantHoles.obj".format(
+    mouse
+)
+implant_fit_transform_file = (
+    implant_annoation_path / "{}_implant_fit.h5".format(mouse)
+)
 
 
 # OBJ files
 model_path = base_path / "ephys/persist/data/MRI/HeadframeModels"
 hole_model_path = model_path / "HoleOBJs"
 modified_probe_mesh_file = model_path / "modified_probe_holder.obj"
-dovetail_tweezer_file = model_path / "dovetailtweezer_oneShank_centered_corrected.obj"
-dovetail_tweezer_4shank_file = (
-    model_path / "dovetailwtweezer_fourShank_centeredOnShank0.obj"
-)
-quadbase_file = model_path / "Quadbase_customHolder_centeredOnShank0.obj"
 
-
-newscale_model_file = model_path / "Centered_Newscale_2pt0.obj"
 
 probe_model_files = {
-    "2.1-alpha": newscale_model_file,
-    "2.1": dovetail_tweezer_file,
-    "quadbase": quadbase_file,
-    "2.4": dovetail_tweezer_4shank_file,
+    "2.1-alpha": model_path / "Centered_Newscale_2pt0.obj",
+    "2.1": model_path / "dovetailtweezer_oneShank_centered_corrected.obj",
+    "quadbase": model_path / "Quadbase_customHolder_centeredOnShank0.obj",
+    "2.4": model_path / "dovetailwtweezer_fourShank_centeredOnShank0.obj",
+    "pipette": model_path / "injection_pipette.obj",
 }
 
 headframe_file = model_path / "TenRunHeadframe.obj"
@@ -121,8 +127,12 @@ cone_file = model_path / "TacoForBehavior" / "0160-200-72_X06.obj"
 well_file = model_path / "WHC_Well" / "0274-400-07_X02.obj"
 implant_model_file = model_path / "0283-300-04.obj"
 
-calibration_path = base_path / "ephys/persist/data/probe_calibrations/CSVCalibrations/"
-calibration_file = calibration_path / "calibration_info_np2_2025_03_18T08_39_00.xlsx"
+calibration_path = (
+    base_path / "ephys/persist/data/probe_calibrations/CSVCalibrations/"
+)
+calibration_file = (
+    calibration_path / "calibration_info_np2_2025_03_18T08_39_00.xlsx"
+)
 parallax_calibration_dir = calibration_path / "log_20250303_122136"
 iso_time = datetime.datetime.now().astimezone().strftime("%Y-%m-%dT%H%M%S%z")
 plan_save_path = annotations_path / f"{mouse}_InsertionPlan_{iso_time}.csv"
@@ -169,7 +179,9 @@ brain_pos = np.vstack(
         for ii in range(idx.shape[0])
     ]
 )
-brain_pos = brain_pos[np.arange(0, brain_pos.shape[0], brain_pos.shape[0] // 1000)]
+brain_pos = brain_pos[
+    np.arange(0, brain_pos.shape[0], brain_pos.shape[0] // 1000)
+]
 
 # Load the brain mesh
 brain_mesh = trimesh.load(
@@ -179,13 +191,17 @@ brain_mesh = trimesh.load(
 
 implant_seg_vol = sitk.ReadImage(str(implant_file))
 
-probe_models = {k: load_newscale_trimesh(v, 0) for k, v in probe_model_files.items()}
+probe_models = {
+    k: load_newscale_trimesh(v, 0) for k, v in probe_model_files.items()
+}
 
 # %%
 
 # Get the trimesh objects for each hole.
 # These are made using blender from the cad file
-hole_files = [x for x in os.listdir(hole_model_path) if ".obj" in x and "Hole" in x]
+hole_files = [
+    x for x in os.listdir(hole_model_path) if ".obj" in x and "Hole" in x
+]
 hole_dict = {}
 for i, flname in enumerate(hole_files):
     hole_num = int(flname.split("Hole")[-1].split(".")[0])
@@ -247,11 +263,13 @@ transformed_implant_targets = apply_rotate_translate(
 reticle_offset = reticle_offsets[reticle_used]
 reticle_rotation = reticle_rotations[reticle_used]
 if calibration_file is None:
-    cal_by_probe_combined, R_reticle_to_bregma = fit_rotation_params_from_parallax(
-        parallax_calibration_dir,
-        reticle_offset,
-        reticle_rotation,
-        find_scaling=True,
+    cal_by_probe_combined, R_reticle_to_bregma = (
+        fit_rotation_params_from_parallax(
+            parallax_calibration_dir,
+            reticle_offset,
+            reticle_rotation,
+            find_scaling=True,
+        )
     )
     global_offset = reticle_offset
 else:
@@ -330,7 +348,9 @@ offsets_LP_by_struct = {
     "BLA": [0, 0.1],
     "RSP": [0, 0],
 }
-offsets_LP_arr_by_struct = {k: np.array(v) for k, v in offsets_LP_by_struct.items()}
+offsets_LP_arr_by_struct = {
+    k: np.array(v) for k, v in offsets_LP_by_struct.items()
+}
 
 target_depth = np.array([2.4, 4.75, 4, 5.8, 4.9, 5.75, 2])  # Guesses, check
 depth_by_struct = {
@@ -356,7 +376,9 @@ hole_by_struct = {
 insertion_trim_coordinates_struct = {}
 
 # %%
-implant_R, implant_t, implant_c = load_sitk_transform(implant_fit_transform_file)
+implant_R, implant_t, implant_c = load_sitk_transform(
+    implant_fit_transform_file
+)
 
 S = trimesh.Scene()
 transformed_implant_targets = {}
@@ -432,7 +454,9 @@ for i, structure in enumerate(target_structures):
 
     if from_calibration:
         this_probe = probe_to_target_mapping[structure]
-        this_affine, this_translation, this_scaling = cal_by_probe_combined[this_probe]
+        this_affine, this_translation, this_scaling = cal_by_probe_combined[
+            this_probe
+        ]
         insertion_vector = (
             ras_to_lps @ np.linalg.inv(this_affine) @ np.array([0, 0, depth])
         )
@@ -501,7 +525,9 @@ for i, structure in enumerate(target_structures):
 
 
 # S.add_geometry(transformed_brain_mesh)
-headframe_mesh = trimesh.Trimesh(vertices=headframe_lps, faces=headframe_faces[0])
+headframe_mesh = trimesh.Trimesh(
+    vertices=headframe_lps, faces=headframe_faces[0]
+)
 cone_mesh = trimesh.Trimesh(vertices=cone_lps, faces=cone_faces[0])
 coneCM.add_object("cone", headframe_mesh)
 
@@ -552,7 +578,9 @@ S.show(viewer="gl")
 
 # %%
 mouse_to_rig_ap = 14
-ap_angle_rig_by_struct = {k: v + mouse_to_rig_ap for k, v in arc_ap_by_struct.items()}
+ap_angle_rig_by_struct = {
+    k: v + mouse_to_rig_ap for k, v in arc_ap_by_struct.items()
+}
 bregma_dims = ["ML", "AP", "DV"]
 cols = {}
 for structure in target_structures:
@@ -564,14 +592,18 @@ for structure in target_structures:
     cols.setdefault("AP angle", []).append(ap_angle_rig_by_struct[structure])
     cols.setdefault("ML angle", []).append(slider_ml_by_struct[structure])
     cols.setdefault("Spin", []).append(spin_by_struct[structure])
-    cols.setdefault("Hole", []).append("Hole {}".format(hole_by_struct[structure]))
+    cols.setdefault("Hole", []).append(
+        "Hole {}".format(hole_by_struct[structure])
+    )
     cols.setdefault("Approx. depth", []).append(depth_by_struct[structure])
 
     target = final_target_by_struct[structure]
     for dim, dim_val in zip(bregma_dims, target):
         cols.setdefault(dim, []).append(np.round(dim_val, 3))
 
-plan_df = pd.DataFrame.from_dict(cols).set_index("Structure").sort_values(by=["Arc"])
+plan_df = (
+    pd.DataFrame.from_dict(cols).set_index("Structure").sort_values(by=["Arc"])
+)
 if plan_save_path is not None:
     plan_df.to_csv(plan_save_path)
 plan_df

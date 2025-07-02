@@ -1,87 +1,81 @@
-name: Tag and publish
+name: release
+
 on:
-  push:
-    branches:
-      - main
-# Remove line 61 to enable automated semantic version bumps.
-# Change line 67 from "if: false" to "if: true" to enable PyPI publishing.
-# Requires that svc-aindscicomp be added as an admin to repo.
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish to PyPI'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+env:
+  DEFAULT_BRANCH: main
+
 jobs:
-  update_badges:
+  tag:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
     - uses: actions/checkout@v4
       with:
-        ref: ${{ env.DEFAULT_BRANCH }}
         fetch-depth: 0
+
+    - name: Pull latest changes
+      run: git pull origin ${{ env.DEFAULT_BRANCH }}
+
+    - uses: astral-sh/setup-uv@v6
+      with:
+        enable-cache: true
+
+    - name: Set up Python
+      run: uv python install
+
+    - name: Extract version from __init__.py and package name from pyproject.toml
+      id: get_version_and_name
+      run: |
+        package_name=$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['name'])")
+        package_name=${package_name//-/_}
+        version=$(uv run python -c "import re;
+        with open(f'./src/${package_name}/__init__.py', 'r') as f:
+          content = f.read();
+          match = re.search(r'__version__\s*=\s*[\'\"]([^\'\"]+)[\'\"]', content);
+          print(match.group(1)) if match else exit(1)")
+        echo "PACKAGE_NAME=$package_name" >> $GITHUB_ENV
+        echo "PACKAGE_VERSION=$version" >> $GITHUB_ENV
+      shell: bash
+
+    - name: Create Git tag
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        git tag -a v${{ env.PACKAGE_VERSION }} -m "v${{ env.PACKAGE_VERSION }}"
+        git push origin v${{ env.PACKAGE_VERSION }}
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
         token: ${{ secrets.SERVICE_TOKEN }}
-    - name: Set up Python 3.13
-      uses: actions/setup-python@v5
-      with:
-        python-version: 3.13
-    - name: Install dependencies
-      run: |
-        python -m pip install -e .[dev] --no-cache-dir
-    - name: Get Python version and Update README.md
-      run: |
-        python_version=$(grep "requires-python" pyproject.toml | grep -o ">=[^\"]*")
-        python_badge=$(grep -o 'python-[^)]*' README.md)
-        new_python_badge="python-$python_version-blue?logo=python"
-        sed -i "s/$python_badge/$new_python_badge/g" README.md
-    - name: Get interrogate values and Update README.md
-      run: |
-        interrogate_val=$(interrogate . | grep -o 'actual: [0-9]*\.[0-9]*' | awk '{print $2}')
-        interrogate_badge=$(grep -o 'interrogate-[^)]*' README.md)
-        if (( $(echo "$interrogate_val >= 90.00" | bc -l) )); then
-            new_interrogate_badge="interrogate-$interrogate_val%25-brightgreen"
-        elif (( $(echo "$interrogate_val < 80.00" | bc -l) )); then
-            new_interrogate_badge="interrogate-$interrogate_val%25-red"
-        else
-            new_interrogate_badge="interrogate-$interrogate_val%25-yellow"
-        fi
-        sed -i "s/$interrogate_badge/$new_interrogate_badge/g" README.md
-    - name: Get Coverage values and Update README.md
-      run: |
-        coverage run -m unittest discover
-        coverage_val=$(coverage report | grep "^TOTAL" | grep -o '[0-9]\+%' | grep -o '[0-9]\+')
-        coverage_badge=$(grep -o "coverage-[^?]*" README.md)
-        if (( $(echo "$coverage_val >= 90.00" | bc -l) )); then
-            new_coverage_badge="coverage-$coverage_val%25-brightgreen"
-        elif (( $(echo "$coverage_val < 80.00" | bc -l) )); then
-            new_coverage_badge="coverage-$coverage_val%25-red"
-        else
-            new_coverage_badge="coverage-$coverage_val%25-yellow"
-        fi
-        sed -i "s/$coverage_badge/$new_coverage_badge/g" README.md
-    - name: Commit changes
-      uses: EndBug/add-and-commit@v9
-      with:
-        default_author: github_actions
-        message: "ci: update badges [skip actions]"
-        add: '["README.md"]'
-  tag:
-    needs: update_badges
-    uses: AllenNeuralDynamics/aind-github-actions/.github/workflows/tag.yml@main
-    secrets:
-      SERVICE_TOKEN: ${{ secrets.SERVICE_TOKEN }}
+        tag_name: v${{ env.PACKAGE_VERSION }}
+        name: Release v${{ env.PACKAGE_VERSION }}
+        generate_release_notes: true
+
   publish:
     needs: tag
+    if: ${{ github.event.inputs.publish == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Pull latest changes
-        run: git pull origin main
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v5
+        run: git pull origin ${{ env.DEFAULT_BRANCH }}
+      - uses: astral-sh/setup-uv@v6
         with:
-          python-version: 3.13
-      - name: Install dependencies
-        run: |
-          pip install --upgrade setuptools wheel twine build
-          python -m build
-          twine check dist/*
-      - name: Publish on PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          password: ${{ secrets.AIND_PYPI_TOKEN }}
+          enable-cache: true
+
+      - name: Build
+        run: uv build
+
+      - name: Publish
+        run: uv publish --token ${{ secrets.AIND_PYPI_TOKEN }}
