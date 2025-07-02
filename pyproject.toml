@@ -73,7 +73,6 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-fail_under = 0
 
 [tool.interrogate]
 ignore-init-method = true
