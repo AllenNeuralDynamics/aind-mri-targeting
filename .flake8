@@ -1,8 +1,0 @@
-[flake8]
-exclude =
-    .git,
-    __pycache__,
-    build,
-    .ipynb_checkpoints,
-    notebooks
-max-complexity = 10

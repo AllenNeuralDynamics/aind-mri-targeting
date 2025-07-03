@@ -20,6 +20,7 @@ dependencies = [
   'aind-anatomical-utils>=0.1,<0.2',
   'aind_mri_utils>=0.2.1,<2',
   'numpy>=1.20,<3',
+  "pandas>=2,<3",
   'pynrrd>=1,<2',
   'SimpleITK>=2,<3',
   'trimesh[recommend]>=4,<5',
@@ -38,6 +39,7 @@ fit_implant = "aind_mri_targeting.scripts.fit_implant:main"
 
 [project.optional-dependencies]
 dev = ['codespell', 'pytest', 'pytest-cov', 'ruff', 'interrogate']
+vscode = ['aind-mri-targeting[dev]', 'ipykernel', 'pip']
 docs = [
   'mkdocs',
   'mkdocs-material',

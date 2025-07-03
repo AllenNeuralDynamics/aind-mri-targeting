@@ -59,31 +59,32 @@ logging.basicConfig(format="%(message)s", level=logging.DEBUG)
 # Set file paths and mouse ID here
 
 # Calibration File with probe data
-mouse_id = "765861"
+mouse_id = "786866"
 reticle_used = "H"
 basepath = Path("/mnt/aind1-vast/scratch/")
 calibration_dir = basepath / "ephys/persist/data/probe_calibrations/CSVCalibrations/"
-
 # Target file with transformed targets
 target_dir = basepath / f"ephys/persist/data/MRI/processed/{mouse_id}/"
 # Calibration directories to use for parallax, with the latter ones taking
 # priority
-parallax_calibration_directories = ["log_20250318_171550"]
+parallax_calibration_directories = []
 # Calibration files to use for manual calibration, with the latter ones taking
 # priority. All manual calibrations will take priority over parallax
 # calibrations
 manual_calibration_filenames = ["calibration_info_np2_2025_03_18T08_39_00.xlsx"]
 # List of probes to ignore manual calibrations from
 probes_to_ignore_manual = []
-target_file = target_dir / f"{mouse_id}_TransformedTargets.csv"
+target_file = None  # target_dir / f"{mouse_id}_TransformedTargets.csv"
 
 parallax_calibration_paths = [calibration_dir / f for f in parallax_calibration_directories]
-manual_calibration_paths = [calibration_dir / f for f in manual_calibration_filenames]
+manual_calibration_paths = [
+    basepath / "ephys/persist/data/MRI/processed/786866/calibration_info_348_sws1_2025_07_02T15_57_00.xlsx"
+]  # [calibration_dir / f for f in manual_calibration_filenames]
 
 # Whether to fit the scale parameters as well. Does not guarantee that the
 # error will be lower. If you have only a few data points, try setting this to
 # True and False and compare.
-fit_scale = True
+fit_scale = False
 
 # Whether to save the targets to a CSV file. If not None, the targets will be
 # saved
@@ -104,8 +105,11 @@ def _round_targets(target, probe_target):
 
 
 # %%
-target_df = pd.read_csv(target_file)
-target_df = target_df.set_index("point")
+if target_file:
+    target_df = pd.read_csv(target_file)
+    target_df = target_df.set_index("point")
+else:
+    target_df = None
 # %% [markdown]
 # ## Transformed targets
 # print the transformed targets to see which targets are available
@@ -146,7 +150,7 @@ targets_and_overshoots_by_probe = {
 # manual_bregma_targets_by_probe = {probe_id: [x, y, z], ...}
 # x y z in mm
 manual_bregma_targets_by_probe = {
-    # 46110: [0, 0, 0],  # in mm!
+    "pipette": [-0.5, 4, -2],  # in mm!
 }
 
 
@@ -207,6 +211,9 @@ else:
 dims = ["ML (mm)", "AP (mm)", "DV (mm)"]
 combined_targets_and_overshoots_by_probe = {}
 for probe, (target_name, overshoot) in targets_and_overshoots_by_probe.items():
+    if target_df is None or target_name not in target_df.index:
+        logger.warning(f"Target {target_name} not found in target file")
+        continue
     target = target_df.loc[target_name, dims].to_numpy().astype(np.float64)
     overshoot_arr = np.array([0, 0, overshoot / 1000])
     combined_targets_and_overshoots_by_probe[probe] = (
