@@ -57,7 +57,7 @@ from scipy.spatial.transform import Rotation
 logging.basicConfig(format="%(message)s", level=logging.DEBUG)
 # %%
 # File Paths
-mouse = "765861"
+mouse = "786866"
 reticle_used = "H"
 target_structures = ["PL", "CLA", "MD", "CA1", "VM", "BLA", "RSP"]
 
@@ -78,10 +78,7 @@ labels_path = annotations_path / "{}_HeadframeHoles.seg.nrrd".format(mouse)
 brain_mask_path = annotations_path / "{}_manual_skull_strip.nrrd".format(mouse)
 image_transform_file = annotations_path / "com_plane.h5"
 structure_mask_path = annotations_path / "Masks"
-structure_files = {
-    structure: structure_mask_path / f"{mouse}{structure}Mask.obj"
-    for structure in target_structures
-}
+structure_files = {structure: structure_mask_path / f"{mouse}{structure}Mask.obj" for structure in target_structures}
 brain_mesh_path = structure_mask_path / "{}_manual_skull_strip.obj".format(mouse)
 
 # Implant annotation
@@ -99,20 +96,14 @@ implant_fit_transform_file = implant_annoation_path / "{}_implant_fit.h5".format
 model_path = base_path / "ephys/persist/data/MRI/HeadframeModels"
 hole_model_path = model_path / "HoleOBJs"
 modified_probe_mesh_file = model_path / "modified_probe_holder.obj"
-dovetail_tweezer_file = model_path / "dovetailtweezer_oneShank_centered_corrected.obj"
-dovetail_tweezer_4shank_file = (
-    model_path / "dovetailwtweezer_fourShank_centeredOnShank0.obj"
-)
-quadbase_file = model_path / "Quadbase_customHolder_centeredOnShank0.obj"
 
-
-newscale_model_file = model_path / "Centered_Newscale_2pt0.obj"
 
 probe_model_files = {
-    "2.1-alpha": newscale_model_file,
-    "2.1": dovetail_tweezer_file,
-    "quadbase": quadbase_file,
-    "2.4": dovetail_tweezer_4shank_file,
+    "2.1-alpha": model_path / "Centered_Newscale_2pt0.obj",
+    "2.1": model_path / "dovetailtweezer_oneShank_centered_corrected.obj",
+    "quadbase": model_path / "Quadbase_customHolder_centeredOnShank0.obj",
+    "2.4": model_path / "dovetailwtweezer_fourShank_centeredOnShank0.obj",
+    "pipette": model_path / "injection_pipette.obj",
 }
 
 headframe_file = model_path / "TenRunHeadframe.obj"
@@ -134,17 +125,13 @@ reticle_rotations = {"H": 0}
 
 # %%
 image_R, image_t, image_c = load_sitk_transform(str(image_transform_file))
-headframe_R, headframe_t, headframe_c = load_sitk_transform(
-    str(headframe_transform_file)
-)
+headframe_R, headframe_t, headframe_c = load_sitk_transform(str(headframe_transform_file))
 
 image = sitk.ReadImage(str(image_path))
 
 # Load the headframe
 headframe, headframe_faces = get_vertices_and_faces(headframe_file)
-headframe_lps = cs.convert_coordinate_system(
-    headframe, "ASR", "LPS"
-)  # Preserves shape!
+headframe_lps = cs.convert_coordinate_system(headframe, "ASR", "LPS")  # Preserves shape!
 
 # Load the headframe
 cone, cone_faces = get_vertices_and_faces(cone_file)
@@ -154,21 +141,14 @@ well, well_faces = get_vertices_and_faces(well_file)
 well_lps = cs.convert_coordinate_system(well, "ASR", "LPS")  # Preserves shape!
 
 implant_model, implant_faces = get_vertices_and_faces(implant_model_file)
-implant_model_lps = cs.convert_coordinate_system(
-    implant_model, "ASR", "LPS"
-)  # Preserves shape!
+implant_model_lps = cs.convert_coordinate_system(implant_model, "ASR", "LPS")  # Preserves shape!
 
 # Load the brain mask
 mask = sitk.ReadImage(str(brain_mask_path))
 idxx = np.where(sitk.GetArrayViewFromImage(mask))
 idx = np.vstack((idxx[2], idxx[1], idxx[0])).T
 brain_pos = np.zeros(idx.shape)
-brain_pos = np.vstack(
-    [
-        mask.TransformIndexToPhysicalPoint(idx[ii, :].tolist())
-        for ii in range(idx.shape[0])
-    ]
-)
+brain_pos = np.vstack([mask.TransformIndexToPhysicalPoint(idx[ii, :].tolist()) for ii in range(idx.shape[0])])
 brain_pos = brain_pos[np.arange(0, brain_pos.shape[0], brain_pos.shape[0] // 1000)]
 
 # Load the brain mesh
@@ -196,9 +176,7 @@ for i, flname in enumerate(hole_files):
 
 # Get the lower face, store with key -1
 hole_dict[-1] = trimesh.load(os.path.join(hole_model_path, "LowerFace.obj"))
-hole_dict[-1].vertices = cs.convert_coordinate_system(
-    hole_dict[-1].vertices, "ASR", "LPS"
-)  # Preserves shape!
+hole_dict[-1].vertices = cs.convert_coordinate_system(hole_dict[-1].vertices, "ASR", "LPS")  # Preserves shape!
 
 
 # %%
@@ -211,28 +189,18 @@ for i, hole_id in enumerate(hole_dict.keys()):
 # %%
 # If implant has holes that are segmented.
 
-implant_targets_by_hole = make_hole_seg_dict(
-    implant_seg_vol, fun=lambda x: np.mean(x, axis=0)
-)
+implant_targets_by_hole = make_hole_seg_dict(implant_seg_vol, fun=lambda x: np.mean(x, axis=0))
 implant_names = list(implant_targets_by_hole.keys())
 implant_targets = np.vstack(list(implant_targets_by_hole.values()))
 
 # %%
-chem_shift_pt_R, chem_shift_pt_t = chemical_shift_transform(
-    compute_chemical_shift(image, ppm=3.7)
-)
-chem_shift_image_R, chem_shift_image_t = invert_rotate_translate(
-    chem_shift_pt_R, chem_shift_pt_t
-)
-chem_image_R, chem_image_t = compose_transforms(
-    chem_shift_image_R, chem_shift_image_t, image_R, image_t
-)
+chem_shift_pt_R, chem_shift_pt_t = chemical_shift_transform(compute_chemical_shift(image, ppm=3.7))
+chem_shift_image_R, chem_shift_image_t = invert_rotate_translate(chem_shift_pt_R, chem_shift_pt_t)
+chem_image_R, chem_image_t = compose_transforms(chem_shift_image_R, chem_shift_image_t, image_R, image_t)
 
 # %%
 
-transformed_brain = apply_rotate_translate(
-    brain_pos, *invert_rotate_translate(chem_image_R, chem_image_t)
-)
+transformed_brain = apply_rotate_translate(brain_pos, *invert_rotate_translate(chem_image_R, chem_image_t))
 transformed_brain_mesh = apply_transform_to_trimesh(
     brain_mesh.copy(), *invert_rotate_translate(chem_image_R, chem_image_t)
 )
@@ -255,11 +223,9 @@ if calibration_file is None:
     )
     global_offset = reticle_offset
 else:
-    cal_by_probe_combined, R_reticle_to_bregma, global_offset = (
-        combine_parallax_and_manual_calibrations(
-            manual_calibration_files=calibration_file,
-            parallax_directories=parallax_calibration_dir,
-        )
+    cal_by_probe_combined, R_reticle_to_bregma, global_offset = combine_parallax_and_manual_calibrations(
+        manual_calibration_files=calibration_file,
+        parallax_directories=parallax_calibration_dir,
     )
 
 probes_used = list(cal_by_probe_combined.keys())
@@ -363,20 +329,12 @@ transformed_implant_targets = {}
 
 for i, key in enumerate(model_implant_targets.keys()):
     implant_tgt = model_implant_targets[key]
-    implant_tgt = apply_rotate_translate(
-        implant_tgt, *invert_rotate_translate(implant_R, implant_t)
-    )
-    implant_tgt = apply_rotate_translate(
-        implant_tgt, *invert_rotate_translate(headframe_R, headframe_t)
-    )
+    implant_tgt = apply_rotate_translate(implant_tgt, *invert_rotate_translate(implant_R, implant_t))
+    implant_tgt = apply_rotate_translate(implant_tgt, *invert_rotate_translate(headframe_R, headframe_t))
     transformed_implant_targets[key] = implant_tgt
 
-vertices = apply_rotate_translate(
-    implant_model_lps, *invert_rotate_translate(implant_R, implant_t)
-)
-vertices = apply_rotate_translate(
-    vertices, *invert_rotate_translate(headframe_R, headframe_t)
-)
+vertices = apply_rotate_translate(implant_model_lps, *invert_rotate_translate(implant_R, implant_t))
+vertices = apply_rotate_translate(vertices, *invert_rotate_translate(headframe_R, headframe_t))
 implant_mesh = trimesh.Trimesh(vertices=vertices, faces=implant_faces[0])
 
 
@@ -433,31 +391,21 @@ for i, structure in enumerate(target_structures):
     if from_calibration:
         this_probe = probe_to_target_mapping[structure]
         this_affine, this_translation, this_scaling = cal_by_probe_combined[this_probe]
-        insertion_vector = (
-            ras_to_lps @ np.linalg.inv(this_affine) @ np.array([0, 0, depth])
-        )
-        insertion_trims = insertion_trim_coordinates_struct.get(
-            structure, np.array([0, 0, 0])
-        )
-        combined_bregma_vector = (
-            adjusted_insertion_pt + insertion_vector + insertion_trims
-        )
+        insertion_vector = ras_to_lps @ np.linalg.inv(this_affine) @ np.array([0, 0, depth])
+        insertion_trims = insertion_trim_coordinates_struct.get(structure, np.array([0, 0, 0]))
+        combined_bregma_vector = adjusted_insertion_pt + insertion_vector + insertion_trims
         scaling_inv = np.diag(1 / this_scaling)
         rigid_affine = scaling_inv @ this_affine
         this_ap, this_ml = find_probe_angle(rigid_affine)
 
         R_probe_mesh = transform_matrix_from_angles(this_ap, this_ml, spin)
 
-        probe_model = apply_transform_to_trimesh(
-            probe_model, R_probe_mesh, combined_bregma_vector
-        )
+        probe_model = apply_transform_to_trimesh(probe_model, R_probe_mesh, combined_bregma_vector)
     else:
         R_probe_mesh = transform_matrix_from_angles(ap_angle, ml_angle, spin)
         insertion_vector = R_probe_mesh @ np.array([0, 0, -depth])
         combined_bregma_vector = adjusted_insertion_pt + insertion_vector
-        probe_model = apply_transform_to_trimesh(
-            probe_model, R_probe_mesh, combined_bregma_vector
-        )
+        probe_model = apply_transform_to_trimesh(probe_model, R_probe_mesh, combined_bregma_vector)
 
     final_target_by_struct[structure] = ras_to_lps @ combined_bregma_vector
 
@@ -478,9 +426,7 @@ for i, structure in enumerate(target_structures):
     trimesh.repair.fix_inversion(this_target_mesh)
 
     vertices = this_target_mesh.vertices
-    vertices = apply_rotate_translate(
-        vertices, *invert_rotate_translate(chem_image_R, chem_image_t)
-    )
+    vertices = apply_rotate_translate(vertices, *invert_rotate_translate(chem_image_R, chem_image_t))
     this_target_mesh.vertices = vertices
 
     # Assign the same color to the structure
@@ -622,9 +568,7 @@ this_affine.T @ np.array([[-1, 0, 0], [0, 1, 0], [0, 0, -1]])
 
 # %%
 
-R = Rotation.from_matrix(
-    this_affine.T @ np.array([[-1, 0, 0], [0, 1, 0], [0, 0, -1]])
-).as_euler("xyz")
+R = Rotation.from_matrix(this_affine.T @ np.array([[-1, 0, 0], [0, 1, 0], [0, 0, -1]])).as_euler("xyz")
 R
 
 # %%

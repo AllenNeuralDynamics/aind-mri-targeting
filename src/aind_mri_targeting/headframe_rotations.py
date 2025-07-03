@@ -130,25 +130,17 @@ def headframe_centers_of_mass(
     else:
         savename_format = f"{mouse_id}_{{}}_{{}}_coms.fcsv"
 
-    save_names = create_savenames(
-        savepath, savename_format, orient_names, ap_names
-    )
+    save_names = create_savenames(savepath, savename_format, orient_names, ap_names)
     if not force:
-        filenames = [
-            f for orient in orient_names for f in save_names[orient].values()
-        ]
+        filenames = [f for orient in orient_names for f in save_names[orient].values()]
         mrt_ut.err_if_files_exist(filenames)
 
     img = try_open_sitk(mri_path)
     seg_img = try_open_sitk(segmentation_path)
     _, seg_odict = nrrd.read(segmentation_path)
-    seg_vals = hr.segment_dict_from_seg_odict(
-        seg_odict, segment_format, ap_names, orient_names, ignore_list
-    )
+    seg_vals = hr.segment_dict_from_seg_odict(seg_odict, segment_format, ap_names, orient_names, ignore_list)
 
-    coms_dict = hr.estimate_coms_from_image_and_segmentation(
-        img, seg_img, seg_vals
-    )
+    coms_dict = hr.estimate_coms_from_image_and_segmentation(img, seg_img, seg_vals)
 
     for orient in orient_names:
         for ap in ap_names:
@@ -160,9 +152,7 @@ def headframe_centers_of_mass(
     return
 
 
-def theta_to_sitk_affine(
-    rot_mat, translation, inverse: bool = False
-) -> sitk.AffineTransform:
+def theta_to_sitk_affine(rot_mat, translation, inverse: bool = False) -> sitk.AffineTransform:
     """
     Convert a set of theta parameters to a SimpleITK affine transformation.
 

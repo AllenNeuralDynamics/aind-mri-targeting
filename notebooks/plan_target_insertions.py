@@ -50,15 +50,10 @@ holes_path = headframe_model_dir / "OneOff_HolesOnly.obj"
 implant_holes_path = str(annotations_path / "{}_ImplantHoles.seg.nrrd".format(mouse))
 
 image_path = str(annotations_path / "{}_100.nii.gz".format(mouse))  # '_100.nii.gz'))
-labels_path = str(
-    annotations_path / "{}_HeadframeHoles.seg.nrrd".format(mouse)
-)  # 'Segmentation.seg.nrrd')#
+labels_path = str(annotations_path / "{}_HeadframeHoles.seg.nrrd".format(mouse))  # 'Segmentation.seg.nrrd')#
 brain_mask_path = str(annotations_path / ("{}_auto_skull_strip.nrrd".format(mouse)))
 manual_annotation_path = str(annotations_path / (f"{mouse}_ManualAnnotations.fcsv"))
-cone_path = (
-    base_dir
-    / "ephys/persist/Software/PinpointBuilds/WavefrontFiles/Cone_0160-200-53.obj"  # noqa E501
-)
+cone_path = base_dir / "ephys/persist/Software/PinpointBuilds/WavefrontFiles/Cone_0160-200-53.obj"
 
 uw_yoni_annotation_path = annotations_path / f"targets-{mouse}-transformed.fcsv"
 
@@ -82,15 +77,13 @@ resolution = 100
 
 
 # %%
-# Handle inconsistant labeling
+# Handle inconsistent labeling
 label_vol = sitk.ReadImage(labels_path)
 odict = {k: label_vol.GetMetaData(k) for k in label_vol.GetMetaDataKeys()}
 insert_underscores = "_" in list(sf.find_seg_nrrd_header_segment_info(odict).keys())[0]
 
 # Load the points on the headframe lines.
-pts1, pts2, order = get_headframe_hole_lines(
-    insert_underscores=insert_underscores, coordinate_system="LPS"
-)
+pts1, pts2, order = get_headframe_hole_lines(insert_underscores=insert_underscores, coordinate_system="LPS")
 
 # order.remove('anterior_vertical')
 
@@ -99,9 +92,7 @@ image = sitk.ReadImage(image_path)
 
 # Load the headframe
 headframe, headframe_faces = get_vertices_and_faces(headframe_path)
-headframe_lps = cs.convert_coordinate_system(
-    headframe, "ASR", "LPS"
-)  # Preserves shape!
+headframe_lps = cs.convert_coordinate_system(headframe, "ASR", "LPS")  # Preserves shape!
 
 # Load just the headframe holes
 holes, holes_faces = get_vertices_and_faces(holes_path)
@@ -113,20 +104,13 @@ mask = sitk.ReadImage(brain_mask_path)
 idxx = np.where(sitk.GetArrayViewFromImage(mask))
 idx = np.vstack((idxx[2], idxx[1], idxx[0])).T
 brain_pos = np.zeros(idx.shape)
-brain_pos = np.vstack(
-    [
-        mask.TransformIndexToPhysicalPoint(idx[ii, :].tolist())
-        for ii in range(idx.shape[0])
-    ]
-)
+brain_pos = np.vstack([mask.TransformIndexToPhysicalPoint(idx[ii, :].tolist()) for ii in range(idx.shape[0])])
 brain_pos = brain_pos[np.arange(0, brain_pos.shape[0], brain_pos.shape[0] // 1000)]
 
 
 # %%
 # Load the computed transform
-trans = mr_sitk.load_sitk_transform(transform_filename, homogeneous=True, invert=True)[
-    0
-]
+trans = mr_sitk.load_sitk_transform(transform_filename, homogeneous=True, invert=True)[0]
 
 # Get chemical shift from MRI image.
 # Defaults are standard UW scans- set params for anything else.
@@ -147,13 +131,9 @@ preferred_pts = {
     "GenFacCran": manual_annotation["GenFacCran2"],
 }
 
-hmg_pts = rot.prepare_data_for_homogeneous_transform(
-    np.array(tuple(preferred_pts.values()))
-)
+hmg_pts = rot.prepare_data_for_homogeneous_transform(np.array(tuple(preferred_pts.values())))
 chem_shift_annotation = hmg_pts @ trans.T @ chem_shift_trans.T
-transformed_annotation = rot.extract_data_for_homogeneous_transform(
-    chem_shift_annotation
-)
+transformed_annotation = rot.extract_data_for_homogeneous_transform(chem_shift_annotation)
 target_nms = tuple(preferred_pts.keys())
 
 for ii in range(transformed_annotation.shape[0]):
@@ -196,10 +176,7 @@ for ii, key in enumerate(label_dict.keys()):
         continue
     idx = np.vstack((idxx[2], idxx[1], idxx[0])).T
     implant_pos = np.vstack(
-        [
-            implant_vol.TransformIndexToPhysicalPoint(idx[ii, :].tolist())
-            for ii in range(idx.shape[0])
-        ]
+        [implant_vol.TransformIndexToPhysicalPoint(idx[ii, :].tolist()) for ii in range(idx.shape[0])]
     )
     implant_pts.append(implant_pos)
     implant_targets.append(np.mean(implant_pos, axis=0))
@@ -269,9 +246,7 @@ for tt in range(transformed_preferred.shape[0]):
         this_AP = []
 
         for jj in range(len(a)):
-            this_ap, this_ml = calculate_arc_angles(
-                transformed_preferred[tt, :], circle[jj, :], ap_offset=0
-            )
+            this_ap, this_ml = calculate_arc_angles(transformed_preferred[tt, :], circle[jj, :], ap_offset=0)
             this_ML.append(this_ml)
             this_AP.append(this_ap)
 
@@ -331,13 +306,9 @@ for ii, row1 in df.iterrows():
         #    continue
         elif row1.hole == row2.hole:
             continue
-        elif (np.abs(row1.ap - row2.ap) < ap_wiggle) and (
-            np.abs(row1.ml - row2.ml) < ml_min
-        ):
+        elif (np.abs(row1.ap - row2.ap) < ap_wiggle) and (np.abs(row1.ml - row2.ml) < ml_min):
             continue
-        elif (np.abs(row1.ap - row2.ap) < ap_min) and (
-            np.abs(row1.ap - row2.ap) > ap_wiggle
-        ):
+        elif (np.abs(row1.ap - row2.ap) < ap_min) and (np.abs(row1.ap - row2.ap) > ap_wiggle):
             continue
         else:
             valid[ii, jj] = True
@@ -353,9 +324,7 @@ works_for_all = set(np.where(valid[match_insertions[0], :])[0])
 
 for ii in range(0, len(match_insertions)):
     works_for_all = (
-        works_for_all
-        & set(np.where(valid[match_insertions[ii], :])[0])
-        & set(np.where(df.target == "GenFacCran")[0])
+        works_for_all & set(np.where(valid[match_insertions[ii], :])[0]) & set(np.where(df.target == "GenFacCran")[0])
     )
 
 df.iloc[np.concatenate([match_insertions, list(works_for_all)])]
@@ -363,9 +332,7 @@ df.iloc[np.concatenate([match_insertions, list(works_for_all)])]
 
 # %%
 def transform_matrix_from_angles_and_target(AP, ML, Target, degrees=True):
-    R = Rotation.from_euler(
-        "XYZ", np.array([np.deg2rad(AP), np.deg2rad(ML), 0])
-    ).as_matrix()
+    R = Rotation.from_euler("XYZ", np.array([np.deg2rad(AP), np.deg2rad(ML), 0])).as_matrix()
     T = np.zeros([4, 4])
     T[:3, :3] = R
     T[0:3, 3] = Target
@@ -387,17 +354,13 @@ cone.vertices = cs.convert_coordinate_system(cone.vertices, "ASR", "LPS")
 S = trimesh.scene.Scene([new_mesh])
 S.add_geometry(cone)
 
-meshes = [
-    trimesh.creation.uv_sphere(radius=0.25) for i in range(len(transformed_implant))
-]
+meshes = [trimesh.creation.uv_sphere(radius=0.25) for i in range(len(transformed_implant))]
 for i, m in enumerate(meshes):
     m.apply_translation(transformed_implant[i, :])
     m.visual.vertex_colors = [255, 0, 255, 255]
     S.add_geometry(m)
 
-meshes = [
-    trimesh.creation.uv_sphere(radius=0.25) for i in range(len(transformed_preferred))
-]
+meshes = [trimesh.creation.uv_sphere(radius=0.25) for i in range(len(transformed_preferred))]
 for i, m in enumerate(meshes):
     m.apply_translation(transformed_preferred[i, :])
     m.visual.vertex_colors = trimesh.visual.random_color()
@@ -407,9 +370,7 @@ for i, m in enumerate(meshes):
 S.add_geometry(new_mesh)
 
 for ii in match_insertions:
-    T1 = transform_matrix_from_angles_and_target(
-        df.ap[ii], -df.ml[ii], df.target_loc[ii]
-    )
+    T1 = transform_matrix_from_angles_and_target(df.ap[ii], -df.ml[ii], df.target_loc[ii])
     S.add_geometry(rot.apply_transform_to_trimesh(mesh.copy(), T1))
 
 S.set_camera([0, 0, 0], distance=150, center=[0, 0, 0])
@@ -421,7 +382,7 @@ S.show()
 
 # %%
 
-# Tools for collsion testings
+# Tools for collision testings
 mesh = load_newscale_trimesh(
     probe_model_file,
     -0.2,
@@ -446,9 +407,7 @@ for this_angle in angle_sets:
     for this_insertion in range(len(match_insertions)):
         # Mesh1
         this_mesh = mesh.copy()
-        TA = trimesh.transformations.euler_matrix(
-            0, 0, np.deg2rad(this_angle[this_insertion])
-        )
+        TA = trimesh.transformations.euler_matrix(0, 0, np.deg2rad(this_angle[this_insertion]))
         TB = transform_matrix_from_angles_and_target(
             df.ap[insert_list[this_insertion]],
             -df.ml[insert_list[this_insertion]],
@@ -478,9 +437,7 @@ cstep = (256) // (len(match_insertions))
 
 for this_insertion in range(len(match_insertions)):
     this_mesh = mesh.copy()
-    TA = trimesh.transformations.euler_matrix(
-        0, 0, np.deg2rad(this_angle[this_insertion])
-    )
+    TA = trimesh.transformations.euler_matrix(0, 0, np.deg2rad(this_angle[this_insertion]))
     TB = transform_matrix_from_angles_and_target(
         df.ap[insert_list[this_insertion]],
         -df.ml[insert_list[this_insertion]],
@@ -489,23 +446,17 @@ for this_insertion in range(len(match_insertions)):
 
     rot.apply_transform_to_trimesh(this_mesh, TA)
     rot.apply_transform_to_trimesh(this_mesh, TB)
-    this_mesh.visual.vertex_colors = (
-        np.array(cm(this_insertion * cstep)) * 255
-    ).astype(int)
+    this_mesh.visual.vertex_colors = (np.array(cm(this_insertion * cstep)) * 255).astype(int)
     S.add_geometry(this_mesh)
 
 
-meshes = [
-    trimesh.creation.uv_sphere(radius=0.25) for i in range(len(transformed_implant))
-]
+meshes = [trimesh.creation.uv_sphere(radius=0.25) for i in range(len(transformed_implant))]
 for i, m in enumerate(meshes):
     m.apply_translation(transformed_implant[i, :])
     m.visual.vertex_colors = [255, 0, 255, 255]
     S.add_geometry(m)
 
-meshes = [
-    trimesh.creation.uv_sphere(radius=0.25) for i in range(len(transformed_preferred))
-]
+meshes = [trimesh.creation.uv_sphere(radius=0.25) for i in range(len(transformed_preferred))]
 for i, m in enumerate(meshes):
     m.apply_translation(transformed_preferred[i, :])
     m.visual.vertex_colors = trimesh.visual.random_color()

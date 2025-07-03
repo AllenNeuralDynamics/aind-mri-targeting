@@ -8,9 +8,7 @@ from aind_mri_targeting.implant_rotations import fit_implant_to_mri_from_files
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Calculate the volume transformation matrix of an implant"
-    )
+    parser = argparse.ArgumentParser(description="Calculate the volume transformation matrix of an implant")
     parser.add_argument("segmentation", help="path to the segmentation file")
     parser.add_argument("hole_dir", help="directory containing the hole files")
     parser.add_argument("output", help="path to the output file")

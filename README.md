@@ -1,17 +1,24 @@
 # aind-mri-targeting
 
-[![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
-![Code Style](https://img.shields.io/badge/code%20style-black-black)
+![CI](https://github.com/AllenNeuralDynamics/aind-mri-utils/actions/workflows/ci.yml/badge.svg)
+[![PyPI - Version](https://img.shields.io/pypi/v/aind-mri-utils)](https://pypi.org/project/aind-mri-utils/)
 [![semantic-release: angular](https://img.shields.io/badge/semantic--release-angular-e10079?logo=semantic-release)](https://github.com/semantic-release/semantic-release)
-![Interrogate](https://img.shields.io/badge/interrogate-51.1%25-red)
-![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen?logo=codecov)
-![Python](https://img.shields.io/badge/python->=3.10-blue?logo=python)
+[![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
+[![ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
 
 
 ## Installation
-To use the software, in the root directory, run
+If you choose to clone the repository, you can install the package by running the following command from the root directory of the repository:
+
 ```bash
-pip install -e .
+pip install .
+```
+
+Otherwise, you can use pip:
+
+```bash
+pip install contraqctor
 ```
 
 To install notebooks, run
@@ -26,37 +33,21 @@ pip install -e .[dev]
 
 ## Contributing
 
-### Linters and testing
+Contributions to this repository are welcome! However, please ensure that your code adheres to the recommended DevOps practices below:
 
-There are several libraries used to run linters, check documentation, and run tests.
+### Linting
 
-- Please test your changes using the **coverage** library, which will run the tests and log a coverage report:
+We use [ruff](https://docs.astral.sh/ruff/) as our primary linting tool.
 
-```bash
-coverage run -m unittest discover && coverage report
-```
+### Testing
 
-- Use **interrogate** to check that modules, methods, etc. have been documented thoroughly:
+Attempt to add tests when new features are added.
+To run the currently available tests, run `uv run pytest` from the root of the repository.
 
-```bash
-interrogate .
-```
+### Lock files
 
-- Use **flake8** to check that code is up to standards (no unused imports, etc.):
-```bash
-flake8 .
-```
-
-- Use **black** to automatically format the code into PEP standards:
-```bash
-black .
-```
-
-- Use **isort** to automatically sort import statements:
-```bash
-isort .
-```
-
+We use [uv](https://docs.astral.sh/uv/) to manage our lock files and therefore encourage everyone to use uv as a package manager as well.
+P
 ### Pull requests
 
 For internal members, please create a branch. For external members, please fork the repository and open a pull request from the fork. We'll primarily use [Angular](https://github.com/angular/angular/blob/main/CONTRIBUTING.md#commit) style for commit messages. Roughly, they should follow the pattern:
@@ -84,14 +75,3 @@ The table below, from [semantic release](https://github.com/semantic-release/sem
 | `fix(pencil): stop graphite breaking when too much pressure applied`                                                                                                                             | ~~Patch~~ Fix Release, Default release                                                                          |
 | `feat(pencil): add 'graphiteWidth' option`                                                                                                                                                       | ~~Minor~~ Feature Release                                                                                       |
 | `perf(pencil): remove graphiteWidth option`<br><br>`BREAKING CHANGE: The graphiteWidth option has been removed.`<br>`The default graphite width of 10mm is always used for performance reasons.` | ~~Major~~ Breaking Release <br /> (Note that the `BREAKING CHANGE: ` token must be in the footer of the commit) |
-
-### Documentation
-To generate the rst files source files for documentation, run
-```bash
-sphinx-apidoc -o doc_template/source/ src 
-```
-Then to create the documentation HTML files, run
-```bash
-sphinx-build -b html doc_template/source/ doc_template/build/html
-```
-More info on sphinx installation can be found [here](https://www.sphinx-doc.org/en/master/usage/installation.html).

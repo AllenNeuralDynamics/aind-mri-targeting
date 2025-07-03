@@ -15,7 +15,7 @@ output_dir = basepath
 # Optional mouse ID
 mouse_id = 771433
 
-# Whether to ovewrite:
+# Whether to overwrite:
 force = False
 
 # Default key format is "{}_{}" for orientation and AP direction.

@@ -8,9 +8,7 @@ from .. import util
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Install notebooks into a specified directory"
-    )
+    parser = argparse.ArgumentParser(description="Install notebooks into a specified directory")
     parser.add_argument("output", nargs="?", help="path to the output file")
     parser.add_argument(
         "-f",
