@@ -24,6 +24,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
       - name: Install uv
         uses: astral-sh/setup-uv@v6
         with:
@@ -31,21 +36,31 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies
-        run: uv sync --extra dev
+        run: uv sync --frozen --extra dev
 
       - name: ruff check
-        run: uv run ruff check .
+        run: uv run --frozen ruff check .
 
       - name: ruff format
-        run: uv run ruff format --check .
+        run: uv run --frozen ruff format --check .
 
       - name: interrogate
-        run: uv run interrogate
+        run: uv run --frozen interrogate
       - name: codespell
-        run: uv run codespell --check-filenames
+        run: uv run --frozen codespell --check-filenames
 
       - name: pytest
-        run: uv run pytest --cov aind-mri-utils
+        run: uv run --frozen pytest --cov aind-mri-utils
 
       - name: Build
         run: uv build
+
+      - name: Run tests on built wheel
+        run: |
+          mkdir /tmp/testdir
+          mkdir -p /tmp/.cache/uv
+          cp -r tests /tmp/testdir/
+          cd /tmp/testdir
+          uv venv
+          UV_CACHE_DIR=/tmp/.cache/uv uv pip install pytest .*whl
+          uv run --frozen pytest tests/
