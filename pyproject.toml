@@ -65,6 +65,7 @@ extend-ignore = []
 mccabe = { max-complexity = 14 }
 pydocstyle = { convention = 'numpy' }
 
+version = ""
 [tool.codespell]
 skip = '.git,*.pdf,*.svg,./bonsai,*.bonsai,./docs/_build,uv.lock'
 ignore-words-list = 'nd'
@@ -90,3 +91,8 @@ exclude = [
   "examples",
   "site",
 ]
+
+[tool.commitizen]
+version_files = ["src/aind_mri_targeting/__version__.py"]
+update_changelog_on_bump = true
+tag_format = "v{version}"
