@@ -57,11 +57,11 @@ jobs:
 
       - name: Run tests on built wheel
         run: |
-          mkdir /tmp/testdir
-          cp -r tests /tmp/testdir/
-          cp dist/*.whl /tmp/testdir/
-          cd /tmp/testdir
+          mkdir ${{ runner.temp }}/testdir
+          cp -r tests ${{ runner.temp }}/testdir/
+          cp dist/*.whl ${{ runner.temp }}/testdir/
+          cd ${{ runner.temp }}/testdir
           uv venv
-          source /tmp/testdir/.venv/bin/activate
+          source ${{ runner.temp }}/testdir/.venv/bin/activate
           uv pip install pytest *.whl
           uv run --frozen pytest tests/

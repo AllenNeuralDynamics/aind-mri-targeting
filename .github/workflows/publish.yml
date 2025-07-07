@@ -1,0 +1,49 @@
+name: release
+
+name: Build • Release • Publish
+on:
+  push:
+    tags:
+      - "v*.*.*"       # runs only on semver tags created above
+concurrency:
+  group: "release"
+  cancel-in-progress: falseon:
+
+jobs:
+  build-release-publish:
+    runs-on: ubuntu-latest
+    name: Build, Release, and Publish
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Build
+        run: uv build
+
+      - name: Create Github Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "Release ${{ github.ref_name }}"
+          body_path: CHANGELOG.md          # reuse the Commitizen changelog
+          files: |
+            dist/*.tar.gz
+            dist/*.whl
+
+      - name: Publish
+        run: uv publish --token ${{ secrets.AIND_PYPI_TOKEN }}
