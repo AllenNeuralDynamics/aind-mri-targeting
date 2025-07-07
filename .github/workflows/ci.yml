@@ -60,7 +60,9 @@ jobs:
           mkdir /tmp/testdir
           mkdir -p /tmp/.cache/uv
           cp -r tests /tmp/testdir/
+          cp dist/*.whl /tmp/testdir/
           cd /tmp/testdir
           uv venv
-          UV_CACHE_DIR=/tmp/.cache/uv uv pip install pytest .*whl
+          source /tmp/testdir/.venv/bin/activate
+          UV_CACHE_DIR=/tmp/.cache/uv uv pip install pytest *.whl
           uv run --frozen pytest tests/
