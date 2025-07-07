@@ -43,9 +43,7 @@ def sitk_to_trimesh_with_metadata(sitk_image):
     # The transformation from voxel to physical space is: physical_point =
     # origin + direction @ (voxel_point * spacing)
     vertices_voxel = vertices * spacing  # Apply spacing
-    vertices_physical = (
-        np.dot(vertices_voxel[:, [2, 1, 0]], direction.T) + origin
-    )  # Apply direction and origin
+    vertices_physical = np.dot(vertices_voxel[:, [2, 1, 0]], direction.T) + origin  # Apply direction and origin
 
     # Step 5: Create a trimesh object with the transformed vertices
     mesh = trimesh.Trimesh(vertices=vertices_physical, faces=faces)
@@ -107,19 +105,11 @@ model_targets = np.vstack(list(model_implant_targets.values()))
 # +
 S = trimesh.Scene()
 
-implant_mesh = trimesh.load_mesh(
-    os.path.join(r"Y:\ephys\persist\data\MRI\HeadframeModels", "0283-300-04.obj")
-)
-implant_mesh.vertices = cs.convert_coordinate_system(
-    implant_mesh.vertices, "ASR", "LPS"
-)
+implant_mesh = trimesh.load_mesh(os.path.join(r"Y:\ephys\persist\data\MRI\HeadframeModels", "0283-300-04.obj"))
+implant_mesh.vertices = cs.convert_coordinate_system(implant_mesh.vertices, "ASR", "LPS")
 
-headframe_mesh = trimesh.load_mesh(
-    os.path.join(r"Y:\ephys\persist\data\MRI\HeadframeModels", "TenRunHeadframe.obj")
-)
-headframe_mesh.vertices = cs.convert_coordinate_system(
-    headframe_mesh.vertices, "ASR", "LPS"
-)
+headframe_mesh = trimesh.load_mesh(os.path.join(r"Y:\ephys\persist\data\MRI\HeadframeModels", "TenRunHeadframe.obj"))
+headframe_mesh.vertices = cs.convert_coordinate_system(headframe_mesh.vertices, "ASR", "LPS")
 
 hole_locs = {}
 brain_bottom = {}
@@ -130,12 +120,9 @@ for ii, mouse in enumerate(dataloc.keys()):
     this_mesh = implant_mesh.copy()
 
     implant_transform = str(
-        implant_alignment_path
-        / f"{mouse}_implant_annotations_to_lps_implant_model_with_brain_better_normalization.h5"  # noqa E501
+        implant_alignment_path / f"{mouse}_implant_annotations_to_lps_implant_model_with_brain_better_normalization.h5"
     )
-    implant_model_trans = mr_sitk.load_sitk_transform(
-        implant_transform, homogeneous=True, invert=False
-    )[0].T
+    implant_model_trans = mr_sitk.load_sitk_transform(implant_transform, homogeneous=True, invert=False)[0].T
 
     # Load the computed transform
     trans = mr_sitk.load_sitk_transform(
@@ -144,18 +131,11 @@ for ii, mouse in enumerate(dataloc.keys()):
         invert=True,
     )[0]
 
-    tmp_ = (
-        rot.prepare_data_for_homogeneous_transform(this_mesh.vertices)
-        @ implant_model_trans
-    )
+    tmp_ = rot.prepare_data_for_homogeneous_transform(this_mesh.vertices) @ implant_model_trans
     this_mesh.vertices = rot.extract_data_for_homogeneous_transform(tmp_ @ trans.T)
-    this_mesh.visual.vertex_colors = np.concatenate(
-        [np.random.randint(0, 255, (3)), [125]]
-    )
+    this_mesh.visual.vertex_colors = np.concatenate([np.random.randint(0, 255, (3)), [125]])
 
-    tmp_ = (
-        rot.prepare_data_for_homogeneous_transform(model_targets) @ implant_model_trans
-    )
+    tmp_ = rot.prepare_data_for_homogeneous_transform(model_targets) @ implant_model_trans
     hole_locs[mouse] = rot.extract_data_for_homogeneous_transform(tmp_ @ trans.T)
 
     sitk_image = sitk.ReadImage(Path(dataloc[mouse]) / f"{mouse}_auto_skull_strip.nrrd")
@@ -220,14 +200,10 @@ ax.set_ylabel("<--P  A-->")
 
 S = trimesh.Scene()
 
-sitk_image = sitk.ReadImage(
-    r"Y:\ephys\persist\data\MRI\processed\738789\738789_auto_skull_strip.nrrd"
-)
+sitk_image = sitk.ReadImage(r"Y:\ephys\persist\data\MRI\processed\738789\738789_auto_skull_strip.nrrd")
 mask_array = sitk.GetArrayFromImage(sitk_image)
 vertices, faces, normals, values = measure.marching_cubes(mask_array, level=0.5)
-mesh = trimesh.Trimesh(
-    vertices=vertices[:, [2, 1, 0]] * 0.1 + sitk_image.GetOrigin(), faces=faces
-)
+mesh = trimesh.Trimesh(vertices=vertices[:, [2, 1, 0]] * 0.1 + sitk_image.GetOrigin(), faces=faces)
 
 S.add_geometry(mesh)
 S.add_geometry(implant_mesh)
@@ -236,9 +212,7 @@ S.show()
 
 # +
 
-sitk_image = sitk.ReadImage(
-    r"Y:\ephys\persist\data\MRI\processed\738789\738789_auto_skull_strip.nrrd"
-)
+sitk_image = sitk.ReadImage(r"Y:\ephys\persist\data\MRI\processed\738789\738789_auto_skull_strip.nrrd")
 
 mesh = sitk_to_trimesh_with_metadata(sitk_image)
 mesh.visual.face_colors = [0, 255, 0, 255]

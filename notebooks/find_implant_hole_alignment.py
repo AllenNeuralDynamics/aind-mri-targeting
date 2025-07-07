@@ -36,9 +36,7 @@ hole_folder = mri_folder / "HeadframeModels/HoleOBJs"
 save_name = str(mouse_folder)  # f"{mouse_id}_implant_fit.h5")
 
 # optional flags
-save_inverse = (
-    True  # save the inverse transformation matrix, which works on volumes
-)
+save_inverse = True  # save the inverse transformation matrix, which works on volumes
 force = True
 
 # %%

@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "aind-mri-targeting"
 description = "Tools to plan and execute MRI-guided targeting experiments"
 license = { text = "MIT" }
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 authors = [
   { name = "Allen Institute for Neural Dynamics" },
   { name = "Galen Lynch", email = "galen@galenlynch.com" },
@@ -17,13 +17,19 @@ readme = "README.md"
 dynamic = ["version"]
 
 dependencies = [
-  "aind-anatomical-utils>=0.1, <0.2",
-  'aind_mri_utils >=0.2.1, <2',
-  'numpy >=1.20, <3',
-  'pynrrd >=1, <2',
-  'SimpleITK >=2, <3',
-  'trimesh[recommend] >=4, <5',
+  'aind-anatomical-utils>=0.1,<0.2',
+  'aind_mri_utils>=0.2.1,<2',
+  'numpy>=1.20,<3',
+  "pandas>=2,<3",
+  'pynrrd>=1,<2',
+  'SimpleITK>=2,<3',
+  'trimesh[recommend]>=4,<5',
 ]
+
+[project.urls]
+Repository = "https://github.com/AllenNeuralDynamics/aind-mri-targeting/"
+Issues = "https://github.com/AllenNeuralDynamics/aind-mri-targeting/issues"
+Changelog = "https://github.com/AllenNeuralDynamics/aind-mri-targeting/releases"
 
 [project.scripts]
 headframe_centers_of_mass = "aind_mri_targeting.scripts.headframe_centers_of_mass:main"
@@ -32,62 +38,60 @@ calculate_headframe_transforms = "aind_mri_targeting.scripts.calculate_headframe
 fit_implant = "aind_mri_targeting.scripts.fit_implant:main"
 
 [project.optional-dependencies]
-dev = ['black', 'coverage', 'flake8', 'interrogate', 'isort', 'Sphinx', 'furo']
+dev = ['codespell', 'pytest', 'pytest-cov', 'ruff', 'interrogate']
+vscode = ['aind-mri-targeting[dev]', 'ipykernel', 'pip']
+docs = [
+  'mkdocs',
+  'mkdocs-material',
+  'mkdocstrings[python]',
+  'pymdown-extensions',
+  'ruff',
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.dynamic]
 version = { attr = "aind_mri_targeting.__version__" }
-
-[tool.black]
-line-length = 79
-target_version = ['py313']
-exclude = '''
-
-(
-  /(
-      \.eggs         # exclude a few common directories in the
-    | \.git          # root of the project
-    | \.hg
-    | \.mypy_cache
-    | \.tox
-    | \.venv
-    | _build
-    | build
-    | dist
-  )/
-  | .gitignore
-)
-'''
+readme = { file = "README.md", content-type = "text/markdown" }
 
 [tool.ruff]
-line-length = 79
-target-version = 'py313'
+line-length = 120
+target-version = 'py39'
 
 [tool.ruff.lint]
-# pyflakes, pycodestyle, isort
-select = ["F", "E", "W", "I", "C90"]
-ignore = ["E501"]
+extend-select = ['Q', 'RUF100', 'C90', 'I']
+extend-ignore = []
+mccabe = { max-complexity = 14 }
+pydocstyle = { convention = 'numpy' }
 
+[tool.codespell]
+skip = '.git,*.pdf,*.svg,./bonsai,*.bonsai,./docs/_build,uv.lock'
+ignore-words-list = 'nd'
 
-[tool.coverage.run]
-omit = ["*__init__*"]
-source = ["aind_mri_targeting", "tests"]
-
-[tool.coverage.report]
-exclude_lines = [
-  "if __name__ == .__main__.:",
-  "from",
-  "import",
-  "pragma: no cover",
-]
-fail_under = 0
-
-[tool.isort]
-line_length = 79
-profile = "black"
+[tool.pytest.ini_options]
+addopts = "--strict-markers --tb=short --cov=src --cov-report=term-missing --cov-fail-under=0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
 
 [tool.interrogate]
-exclude = ["setup.py", "docs", "build"]
-fail-under = 0
+ignore-init-method = true
+ignore-magic = true
+ignore_module = true
+fail-under = 30
+exclude = [
+  "__init__.py",
+  "tests",
+  "docs",
+  "build",
+  "setup.py",
+  "examples",
+  "site",
+]
+
+[tool.commitizen]
+version_files = ["src/aind_mri_targeting/__version__.py"]
+update_changelog_on_bump = true
+tag_format = "v{version}"

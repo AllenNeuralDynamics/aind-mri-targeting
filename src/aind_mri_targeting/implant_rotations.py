@@ -92,9 +92,7 @@ def load_convert_trimesh(file, source_cs="ASR", target_cs="LPS"):
     """
     mesh = trimesh.load(file)
     if source_cs != target_cs:
-        mesh.vertices = cs.convert_coordinate_system(
-            mesh.vertices, source_cs, target_cs
-        )
+        mesh.vertices = cs.convert_coordinate_system(mesh.vertices, source_cs, target_cs)
     return mesh
 
 
@@ -140,9 +138,7 @@ def find_load_meshes(
     hole_meshes = {}
     for hole_num, file in hole_files.items():
         hole_meshes[hole_num] = load_convert_trimesh(file, **load_convert_kws)
-    hole_meshes[-1] = load_convert_trimesh(
-        Path(hole_directory) / lower_face_file, **load_convert_kws
-    )
+    hole_meshes[-1] = load_convert_trimesh(Path(hole_directory) / lower_face_file, **load_convert_kws)
     return hole_meshes
 
 
@@ -214,14 +210,10 @@ def fit_implant_to_mri_from_files(
     hole_seg_dict = make_hole_seg_dict(implant_annotations)
     hole_mesh_dict = find_load_meshes(hole_directory, **find_load_mesh_kws)
 
-    rotation_matrix, translation = fit_implant_to_mri(
-        hole_seg_dict, hole_mesh_dict, **fit_kws
-    )
+    rotation_matrix, translation = fit_implant_to_mri(hole_seg_dict, hole_mesh_dict, **fit_kws)
 
     if save_file_path is not None:
-        transform = rotation_matrix_to_sitk(
-            rotation=rotation_matrix, translation=translation
-        )
+        transform = rotation_matrix_to_sitk(rotation=rotation_matrix, translation=translation)
         if save_inverse:
             transform = transform.GetInverse()
         sitk.WriteTransform(transform, str(save_file_path))
