@@ -65,7 +65,6 @@ extend-ignore = []
 mccabe = { max-complexity = 14 }
 pydocstyle = { convention = 'numpy' }
 
-version = ""
 [tool.codespell]
 skip = '.git,*.pdf,*.svg,./bonsai,*.bonsai,./docs/_build,uv.lock'
 ignore-words-list = 'nd'
