@@ -50,7 +50,7 @@ We use [uv](https://docs.astral.sh/uv/) to manage our lock files and therefore e
 P
 ### Pull requests
 
-For internal members, please create a branch. For external members, please fork the repository and open a pull request from the fork. We'll primarily use [Angular](https://github.com/angular/angular/blob/main/CONTRIBUTING.md#commit) style for commit messages. Roughly, they should follow the pattern:
+For internal members, please create a branch. For external members, please fork the repository and open a pull request from the fork. We'll primarily use [conventional commits](https://www.conventionalcommits.org/en/v1.0.0-beta.4/#summary) style for commit messages. Roughly, they should follow the pattern:
 ```text
 <type>(<scope>): <short summary>
 ```

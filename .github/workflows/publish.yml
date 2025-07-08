@@ -1,16 +1,14 @@
 name: "Build • Release • Publish"
 on:
-  workflow_run:
-    workflows: ["Bump version with Commitizen"]
-    types:
-      - completed
+  push:
+    tags:
+      - 'v[0-9]*'          # semver tags
 
 env:
   PYTHON_VERSION: "3.13"
 
 jobs:
   build-release-publish:
-    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     name: "Build, Release, and Publish"
 
