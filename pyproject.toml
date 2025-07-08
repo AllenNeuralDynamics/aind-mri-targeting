@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "aind-mri-targeting"
 description = "Tools to plan and execute MRI-guided targeting experiments"
-license = { text = "MIT" }
+license = "MIT" 
 requires-python = ">=3.9"
 authors = [
   { name = "Allen Institute for Neural Dynamics" },
@@ -92,6 +92,7 @@ exclude = [
 ]
 
 [tool.commitizen]
-version_files = ["src/aind_mri_targeting/__version__.py"]
+version_files = ["src/aind_mri_targeting/__init__.py:__version__"]
 update_changelog_on_bump = true
-tag_format = "v{version}"
+tag_format = "v$version"
+version = "0.0.28"

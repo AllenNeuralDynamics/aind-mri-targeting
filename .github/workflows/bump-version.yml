@@ -1,4 +1,4 @@
-name: Bump version with Commitizen
+name: "Bump version with Commitizen"
 on:
   push:
     branches:
@@ -8,17 +8,18 @@ jobs:
     # Don’t re-run on the bot’s own “bump:” commits
     if: "!startsWith(github.event.head_commit.message, 'bump:')"
     runs-on: ubuntu-latest
-    name: "Bump version and create changelog with commitizen"
+    name: Bump version with commitizen
     steps:
       - name: Check out
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0         # Commitizen needs the full history
-          token: "${{ secrets.GITHUB_TOKEN }}"
+          ref: ${{ env.DEFAULT_BRANCH }}
+          fetch-depth: 0
+          token: ${{ secrets.SERVICE_TOKEN }}
       - id: cz
         name: Bump & generate CHANGELOG
         uses: commitizen-tools/commitizen-action@master   # pin a version you trust
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.SERVICE_TOKEN }}
       - name: Show the new version
         run: echo "Bumped to ${{ steps.cz.outputs.version }}"

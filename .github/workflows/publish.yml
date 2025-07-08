@@ -1,49 +1,72 @@
-name: release
-
-name: Build • Release • Publish
+name: "Build • Release • Publish"
 on:
-  push:
-    tags:
-      - "v*.*.*"       # runs only on semver tags created above
-concurrency:
-  group: "release"
-  cancel-in-progress: falseon:
+  workflow_run:
+    workflows: ["Bump version with Commitizen"]
+    types:
+      - completed
+
+env:
+  PYTHON_VERSION: "3.13"
 
 jobs:
   build-release-publish:
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    name: Build, Release, and Publish
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    name: "Build, Release, and Publish"
 
-      - name: Set up Python
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: "Set up Python"
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install uv
+      - name: "Install uv"
         uses: astral-sh/setup-uv@v6
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ env.PYTHON_VERSION }}
           enable-cache: true
 
-      - name: Install dependencies
+      - name: "Install dependencies"
         run: uv sync --frozen
 
-      - name: Build
+      - name: "Build package"
         run: uv build
 
-      - name: Create Github Release
+      - name: "Get version for release"
+        id: get_version
+        run: |
+          set -e
+          # Get the latest tag created by commitizen
+          VERSION=$(git describe --tags --abbrev=0)
+          echo "Using version from git tag: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: "Verify build artifacts"
+        run: |
+          ls -la dist/
+          echo "Built packages:"
+          find dist/ -name "*.whl" -o -name "*.tar.gz" | head -10
+      - name: "Create GitHub Release"
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: "Release ${{ github.ref_name }}"
-          body_path: CHANGELOG.md          # reuse the Commitizen changelog
+          tag_name: ${{ steps.get_version.outputs.version }}
+          name: "Release ${{ steps.get_version.outputs.version }}"
+          generate_release_notes: true
           files: |
             dist/*.tar.gz
             dist/*.whl
 
-      - name: Publish
+      - name: "Publish to PyPI"
         run: uv publish --token ${{ secrets.AIND_PYPI_TOKEN }}
+
+      - name: "Release summary"
+        run: |
+          echo "✅ Successfully released ${{ steps.get_version.outputs.version }}"
+          echo "📦 Published to PyPI"
+          echo "🏷️ GitHub release created"
