@@ -95,4 +95,4 @@ exclude = [
 version_files = ["src/aind_mri_targeting/__init__.py:__version__"]
 update_changelog_on_bump = true
 tag_format = "v$version"
-version = "0.1.0"
+version = "0.1.1"
