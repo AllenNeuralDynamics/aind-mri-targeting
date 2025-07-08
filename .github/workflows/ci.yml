@@ -1,22 +1,29 @@
-name: test and build
+name: "CI"
+
+permissions:
+  contents: read          # checkout
+  pull-requests: read     # annotate PRs
 
 on:
   workflow_dispatch:
   pull_request:
-    branches:
-      - main
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
-    branches:
-      - main
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   tests:
     name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     if: >
-      (!github.event.pull_request || github.event.pull_request.draft == false) &&
+      (github.event_name != 'pull_request' || github.event.pull_request.draft == false) &&
       github.actor != 'github-actions[bot]' &&
-      !startsWith(github.event.head_commit.message, 'bump:')
+      !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'bump:'))
 
     strategy:
       matrix:
@@ -39,33 +46,34 @@ jobs:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
 
-      - name: Install dependencies
+      - name: Install project + dev dependencies
         run: uv sync --frozen --extra dev
 
-      - name: ruff check
-        run: uv run --frozen ruff check .
+      - name: Ruff (lint + format-check)
+        run: |
+          uv run --frozen ruff format --check --diff .
+          uv run --frozen ruff check --output-format=github .
 
-      - name: ruff format
-        run: uv run --frozen ruff format --check .
+      - name: Interrogate (docstring coverage)
+        run: uv run --frozen interrogate -v
 
-      - name: interrogate
-        run: uv run --frozen interrogate
-      - name: codespell
+      - name: Codespell (typo checker)
         run: uv run --frozen codespell --check-filenames
 
-      - name: pytest
+      - name: Pytest (unit tests)
         run: uv run --frozen pytest --cov aind-mri-utils
 
       - name: Build
         run: uv build
 
-      - name: Run tests on built wheel
+      - name: Smoke-test built wheel
         run: |
-          mkdir ${{ runner.temp }}/testdir
-          cp -r tests ${{ runner.temp }}/testdir/
-          cp dist/*.whl ${{ runner.temp }}/testdir/
-          cd ${{ runner.temp }}/testdir
+          TEMP_DIR=${{ runner.temp }}/wheeltest
+          mkdir "$TEMP_DIR"
+          cp -r tests "$TEMP_DIR/"
+          cp dist/*.whl "$TEMP_DIR/"
+          cd "$TEMP_DIR"
           uv venv
-          source ${{ runner.temp }}/testdir/.venv/bin/activate
+          source .venv/bin/activate
           uv pip install pytest *.whl
-          uv run --frozen pytest tests/
+          pytest -q

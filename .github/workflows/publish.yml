@@ -1,30 +1,35 @@
-name: "Build • Release • Publish"
-on:
-  push:
-    tags:
-      - 'v[0-9]*'          # semver tags
+name: "Release"
+
+permissions:
+  contents: write    # create release + upload assets
+
+concurrency:
+  group: release
+  cancel-in-progress: false   # let releases finish
 
 env:
   PYTHON_VERSION: "3.13"
 
+on:
+  push:
+    tags:
+      - 'v[0-9]*'          # semver tags
+  workflow_dispatch:
+
 jobs:
   build-release-publish:
     runs-on: ubuntu-latest
-    name: "Build, Release, and Publish"
 
     steps:
-      - name: "Checkout repository"
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: "Set up Python"
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: "Install uv"
-        uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           enable-cache: true
@@ -35,20 +40,13 @@ jobs:
       - name: "Build package"
         run: uv build
 
-      - name: "Get version for release"
-        id: get_version
-        run: |
-          set -e
-          # Get the latest tag created by commitizen
-          VERSION=$(git describe --tags --abbrev=0)
-          echo "Using version from git tag: $VERSION"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Determine version (git tag)
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME}" >>"$GITHUB_OUTPUT"
 
       - name: "Verify build artifacts"
-        run: |
-          ls -la dist/
-          echo "Built packages:"
-          find dist/ -name "*.whl" -o -name "*.tar.gz" | head -10
+        run: ls -la dist/
+
       - name: "Create GitHub Release"
         id: create_release
         uses: softprops/action-gh-release@v2
@@ -62,9 +60,3 @@ jobs:
 
       - name: "Publish to PyPI"
         run: uv publish --token ${{ secrets.AIND_PYPI_TOKEN }}
-
-      - name: "Release summary"
-        run: |
-          echo "✅ Successfully released ${{ steps.get_version.outputs.version }}"
-          echo "📦 Published to PyPI"
-          echo "🏷️ GitHub release created"
