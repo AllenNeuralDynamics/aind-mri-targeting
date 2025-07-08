@@ -29,7 +29,7 @@ dependencies = [
 [project.urls]
 Repository = "https://github.com/AllenNeuralDynamics/aind-mri-targeting/"
 Issues = "https://github.com/AllenNeuralDynamics/aind-mri-targeting/issues"
-Changelog = "https://github.com/AllenNeuralDynamics/aind-mri-targeting/releases"
+Changelog = "https://github.com/AllenNeuralDynamics/aind-mri-targeting/blob/main/CHANGELOG.md"
 
 [project.scripts]
 headframe_centers_of_mass = "aind_mri_targeting.scripts.headframe_centers_of_mass:main"
@@ -57,10 +57,10 @@ readme = { file = "README.md", content-type = "text/markdown" }
 
 [tool.ruff]
 line-length = 120
-target-version = 'py39'
+target-version = 'py313'
 
 [tool.ruff.lint]
-extend-select = ['Q', 'RUF100', 'C90', 'I']
+extend-select = ['Q', 'RUF100', 'C90', 'I', 'F', 'E', 'W']
 extend-ignore = []
 mccabe = { max-complexity = 14 }
 pydocstyle = { convention = 'numpy' }
