@@ -1,3 +1,9 @@
+## v0.1.3 (2025-07-11)
+
+### Fix
+
+- update arc_angle function names
+
 ## v0.1.2 (2025-07-08)
 
 ### Fix
