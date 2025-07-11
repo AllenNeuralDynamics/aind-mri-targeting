@@ -61,7 +61,7 @@ logging.basicConfig(format="%(message)s", level=logging.DEBUG)
 # Calibration File with probe data
 mouse_id = "786866"
 reticle_used = "H"
-basepath = Path("/mnt/aind1-vast/scratch/")
+basepath = Path("/mnt/vast/scratch/")
 calibration_dir = basepath / "ephys/persist/data/probe_calibrations/CSVCalibrations/"
 # Target file with transformed targets
 target_dir = basepath / f"ephys/persist/data/MRI/processed/{mouse_id}/"
@@ -78,7 +78,7 @@ target_file = None  # target_dir / f"{mouse_id}_TransformedTargets.csv"
 
 parallax_calibration_paths = [calibration_dir / f for f in parallax_calibration_directories]
 manual_calibration_paths = [
-    basepath / "ephys/persist/data/MRI/processed/786866/calibration_info_348_sws1_2025_07_02T15_57_00.xlsx"
+    basepath / "ephys/persist/data/MRI/processed/786866/calibration_info_348_sws1_2025_07_10T11_00_00.xlsx"
 ]  # [calibration_dir / f for f in manual_calibration_filenames]
 
 # Whether to fit the scale parameters as well. Does not guarantee that the
@@ -150,7 +150,7 @@ targets_and_overshoots_by_probe = {
 # manual_bregma_targets_by_probe = {probe_id: [x, y, z], ...}
 # x y z in mm
 manual_bregma_targets_by_probe = {
-    "pipette": [-0.5, 4, -2],  # in mm!
+    "pipette": [1, 1, -1],  # in mm!
 }
 
 

@@ -25,7 +25,7 @@ import pandas as pd
 import SimpleITK as sitk
 import trimesh
 from aind_anatomical_utils import coordinate_systems as cs
-from aind_mri_utils.arc_angles import transform_matrix_from_angles
+from aind_mri_utils.arc_angles import arc_angles_to_affine
 from aind_mri_utils.chemical_shift import (
     chemical_shift_transform,
     compute_chemical_shift,
@@ -398,11 +398,11 @@ for i, structure in enumerate(target_structures):
         rigid_affine = scaling_inv @ this_affine
         this_ap, this_ml = find_probe_angle(rigid_affine)
 
-        R_probe_mesh = transform_matrix_from_angles(this_ap, this_ml, spin)
+        R_probe_mesh = arc_angles_to_affine(this_ap, this_ml, spin)
 
         probe_model = apply_transform_to_trimesh(probe_model, R_probe_mesh, combined_bregma_vector)
     else:
-        R_probe_mesh = transform_matrix_from_angles(ap_angle, ml_angle, spin)
+        R_probe_mesh = arc_angles_to_affine(ap_angle, ml_angle, spin)
         insertion_vector = R_probe_mesh @ np.array([0, 0, -depth])
         combined_bregma_vector = adjusted_insertion_pt + insertion_vector
         probe_model = apply_transform_to_trimesh(probe_model, R_probe_mesh, combined_bregma_vector)
@@ -526,7 +526,7 @@ tgt_structure = "CLA"
 this_probe = probe_to_target_mapping[tgt_structure]
 this_affine = cal_by_probe_combined[this_probe][0]
 this_ap, this_ml = find_probe_angle(this_affine)
-R_probe_mesh = transform_matrix_from_angles(this_ap, this_ml)
+R_probe_mesh = arc_angles_to_affine(this_ap, this_ml)
 R_probe_mesh[:3, :3]
 
 # %%

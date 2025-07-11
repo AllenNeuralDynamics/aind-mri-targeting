@@ -11,7 +11,7 @@ import trimesh
 from aind_anatomical_utils import coordinate_systems as cs
 from aind_anatomical_utils import slicer as sf
 from aind_mri_utils import rotations as rot
-from aind_mri_utils.arc_angles import transform_matrix_from_angles_and_target
+from aind_mri_utils.arc_angles import arc_angles_to_affine
 from aind_mri_utils.chemical_shift import (
     chemical_shift_transform,
     compute_chemical_shift,
@@ -385,10 +385,9 @@ for this_angle in angle_sets:
         # Mesh1
         this_mesh = mesh.copy()
         TA = trimesh.transformations.euler_matrix(0, 0, np.deg2rad(this_angle[this_insertion]))
-        TB = transform_matrix_from_angles_and_target(
+        TB = arc_angles_to_affine(
             df.ap[insert_list[this_insertion]],
             -df.ml[insert_list[this_insertion]],
-            df.target_loc[insert_list[this_insertion]],
         )  # my ml convention is backwards
 
         apply_transform_to_trimesh(this_mesh, TA)
@@ -408,10 +407,9 @@ for this_angle in angle_sets:
             # Mesh1
             this_mesh = mesh.copy()
             TA = trimesh.transformations.euler_matrix(0, 0, np.deg2rad(this_angle[this_insertion]))
-            TB = transform_matrix_from_angles_and_target(
+            TB = arc_angles_to_affine(
                 df.ap[insert_list[this_insertion]],
                 -df.ml[insert_list[this_insertion]],
-                df.target_loc[insert_list[this_insertion]],
             )  # my ml convention is backwards
 
             apply_transform_to_trimesh(this_mesh, TA)
@@ -451,10 +449,9 @@ cstep = (256) // (len(seed_insertions))
 for this_insertion in range(len(seed_insertions)):
     this_mesh = mesh.copy()
     TA = trimesh.transformations.euler_matrix(0, 0, np.deg2rad(this_angle[this_insertion]))
-    TB = transform_matrix_from_angles_and_target(
+    TB = arc_angles_to_affine(
         df.ap[insert_list[this_insertion]],
         -df.ml[insert_list[this_insertion]],
-        df.target_loc[insert_list[this_insertion]],
     )  # my ml convention is backwards
 
     apply_transform_to_trimesh(this_mesh, TA)

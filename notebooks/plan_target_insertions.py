@@ -12,7 +12,7 @@ import trimesh
 from aind_anatomical_utils import coordinate_systems as cs
 from aind_anatomical_utils import slicer as sf
 from aind_mri_utils import rotations as rot
-from aind_mri_utils.arc_angles import calculate_arc_angles
+from aind_mri_utils.arc_angles import arc_angles_to_affine, vector_to_arc_angles
 from aind_mri_utils.chemical_shift import (
     chemical_shift_transform,
     compute_chemical_shift,
@@ -22,7 +22,6 @@ from aind_mri_utils.file_io.obj_files import get_vertices_and_faces
 from aind_mri_utils.meshes import load_newscale_trimesh
 from aind_mri_utils.optimization import get_headframe_hole_lines
 from matplotlib import cm
-from scipy.spatial.transform import Rotation
 
 # %%
 # File Paths
@@ -230,11 +229,7 @@ TARGET_LOC = []
 for tt in range(transformed_preferred.shape[0]):
     for hh in range(transformed_implant.shape[0]):
         insertion_vector = transformed_implant[hh, :] - transformed_preferred[tt, :]
-        ap, ml = calculate_arc_angles(
-            transformed_preferred[tt, :],
-            transformed_implant[hh, :],
-            ap_offset=0,
-        )
+        ap, ml = vector_to_arc_angles(insertion_vector)
 
         radius = 0.3
         theta = np.deg2rad(np.arange(0, 360, 1))
@@ -246,7 +241,8 @@ for tt in range(transformed_preferred.shape[0]):
         this_AP = []
 
         for jj in range(len(a)):
-            this_ap, this_ml = calculate_arc_angles(transformed_preferred[tt, :], circle[jj, :], ap_offset=0)
+            insertion_vector = transformed_preferred[tt, :], circle[jj, :]
+            this_ap, this_ml = vector_to_arc_angles(insertion_vector)
             this_ML.append(this_ml)
             this_AP.append(this_ap)
 
@@ -331,14 +327,6 @@ df.iloc[np.concatenate([match_insertions, list(works_for_all)])]
 
 
 # %%
-def transform_matrix_from_angles_and_target(AP, ML, Target, degrees=True):
-    R = Rotation.from_euler("XYZ", np.array([np.deg2rad(AP), np.deg2rad(ML), 0])).as_matrix()
-    T = np.zeros([4, 4])
-    T[:3, :3] = R
-    T[0:3, 3] = Target
-    return T
-
-
 insertion_list = match_insertions
 
 
@@ -370,7 +358,7 @@ for i, m in enumerate(meshes):
 S.add_geometry(new_mesh)
 
 for ii in match_insertions:
-    T1 = transform_matrix_from_angles_and_target(df.ap[ii], -df.ml[ii], df.target_loc[ii])
+    T1 = arc_angles_to_affine(df.ap[ii], -df.ml[ii])
     S.add_geometry(rot.apply_transform_to_trimesh(mesh.copy(), T1))
 
 S.set_camera([0, 0, 0], distance=150, center=[0, 0, 0])
@@ -408,10 +396,9 @@ for this_angle in angle_sets:
         # Mesh1
         this_mesh = mesh.copy()
         TA = trimesh.transformations.euler_matrix(0, 0, np.deg2rad(this_angle[this_insertion]))
-        TB = transform_matrix_from_angles_and_target(
+        TB = arc_angles_to_affine(
             df.ap[insert_list[this_insertion]],
             -df.ml[insert_list[this_insertion]],
-            df.target_loc[insert_list[this_insertion]],
         )  # my ml convention is backwards
 
         rot.apply_transform_to_trimesh(this_mesh, TA)
@@ -438,10 +425,9 @@ cstep = (256) // (len(match_insertions))
 for this_insertion in range(len(match_insertions)):
     this_mesh = mesh.copy()
     TA = trimesh.transformations.euler_matrix(0, 0, np.deg2rad(this_angle[this_insertion]))
-    TB = transform_matrix_from_angles_and_target(
+    TB = arc_angles_to_affine(
         df.ap[insert_list[this_insertion]],
         -df.ml[insert_list[this_insertion]],
-        df.target_loc[insert_list[this_insertion]],
     )  # my ml convention is backwards
 
     rot.apply_transform_to_trimesh(this_mesh, TA)
