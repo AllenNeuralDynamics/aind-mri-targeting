@@ -61,7 +61,7 @@ jobs:
         run: uv run --frozen codespell --check-filenames
 
       - name: Pytest (unit tests)
-        run: uv run --frozen pytest --cov aind-mri-utils
+        run: uv run --frozen pytest --cov aind_mri_targeting
 
       - name: Build
         run: uv build
