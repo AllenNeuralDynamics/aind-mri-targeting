@@ -4,7 +4,6 @@ from pathlib import Path
 import numpy as np
 import SimpleITK as sitk
 from aind_anatomical_utils import slicer as sf
-from aind_mri_utils import reticle_calibrations as rc
 from aind_mri_utils import rotations as rot
 from aind_mri_utils.chemical_shift import (
     chemical_shift_transform,
@@ -12,6 +11,11 @@ from aind_mri_utils.chemical_shift import (
 )
 from aind_mri_utils.file_io import simpleitk as mr_sitk
 from aind_mri_utils.planning import candidate_insertions
+from aind_mri_utils.reticle_calibrations import (
+    fit_rotation_params,
+    read_manual_reticle_calibration,
+    transform_probe_to_bregma,
+)
 
 # %%
 mouse = "721685"
@@ -74,7 +78,7 @@ target_structure_pair = [("4", "CCant"), ("3", "CCant")]
     global_offset,
     global_rotation_degrees,
     reticle_name,
-) = rc.read_reticle_calibration(calibration_file)
+) = read_manual_reticle_calibration(calibration_file)
 
 
 # %%
@@ -88,42 +92,28 @@ measurements = {
         ),
     },
 }
-probe_scales = {46100: False, 46110: False}
 # %%
 transform_rs = dict()
 transform_offsets = dict()
-scaling_vecs = dict()
 for probe in measurements:
     reticle_coords, probe_coords = adjusted_pairs_by_probe[probe]
-    if probe_scales[probe]:
-        (
-            transform_rs[probe],
-            scaling_vecs[probe],
-            transform_offsets[probe],
-            _,
-        ) = rc.fit_rotation_params(
-            reticle_pts=reticle_coords,
-            probe_pts=probe_coords,
-            find_scaling=True,
-        )
-    else:
-        transform_rs[probe], transform_offsets[probe], _ = rc.fit_rotation_params(
-            reticle_pts=reticle_coords,
-            probe_pts=probe_coords,
-            find_scaling=False,
-        )
-        scaling_vecs[probe] = None
+    (
+        transform_rs[probe],
+        transform_offsets[probe],
+    ) = fit_rotation_params(
+        reticle_pts=reticle_coords,
+        probe_pts=probe_coords,
+    )
 
 # %%
 transformed_global_points = dict()
 for probe in measurements:
     transformed_global_points[probe] = dict()
     for name, coord in measurements[probe].items():
-        transformed_global_points[probe][name] = rc.transform_probe_to_bregma(
+        transformed_global_points[probe][name] = transform_probe_to_bregma(
             measurements[probe][name] / 1000,
             transform_rs[probe],
             transform_offsets[probe],
-            scale=scaling_vecs[probe],
         )
 # %%
 manual_annotation = sf.read_slicer_fcsv(manual_annotation_path)
