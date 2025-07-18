@@ -81,11 +81,6 @@ manual_calibration_paths = [
     basepath / "ephys/persist/data/MRI/processed/786866/calibration_info_348_sws1_2025_07_10T11_00_00.xlsx"
 ]  # [calibration_dir / f for f in manual_calibration_filenames]
 
-# Whether to fit the scale parameters as well. Does not guarantee that the
-# error will be lower. If you have only a few data points, try setting this to
-# True and False and compare.
-fit_scale = False
-
 # Whether to save the targets to a CSV file. If not None, the targets will be
 # saved
 save_path = None
@@ -181,7 +176,6 @@ if len(manual_calibration_paths) > 0:
         manual_calibration_paths,
         parallax_calibration_paths,
         probes_to_ignore_manual,
-        find_scaling=fit_scale,
     )
 else:
     (
@@ -193,7 +187,6 @@ else:
         parallax_calibration_paths[0],
         reticle_offset,
         reticle_rotation,
-        find_scaling=fit_scale,
     )
     t_reticle_to_bregma = reticle_offset
 # %% [markdown]
@@ -243,7 +236,7 @@ for probe, (
     cols.setdefault("Probe", []).append(probe)
     cols.setdefault("Target", []).append(target_name)
     cols.setdefault("Overshoot (µm)", []).append(1000 * overshoot[2])
-    R, t, _ = combined_cal_by_probe[probe]
+    R, t = combined_cal_by_probe[probe]
     probe_target = transform_bregma_to_probe(target, R, t)
     probe_target_and_overshoot = probe_target + overshoot
     target_rnd, probe_target_and_overshoot_rnd = _round_targets(target, probe_target_and_overshoot)

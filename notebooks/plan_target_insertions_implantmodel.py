@@ -30,7 +30,7 @@ from aind_mri_utils.planning import (
 )
 from aind_mri_utils.reticle_calibrations import (
     fit_rotation_params,
-    read_reticle_calibration,
+    read_manual_reticle_calibration,
     transform_probe_to_bregma,
 )
 
@@ -191,47 +191,28 @@ if measured_hole_centers:
                 global_offset,
                 global_rotation_degrees,
                 reticle_name,
-            ) = read_reticle_calibration(calfile)
+            ) = read_manual_reticle_calibration(calfile)
             transforms[calfile] = dict()
             for probe in adjusted_pairs_by_probe:
                 reticle_coords, probe_coords = adjusted_pairs_by_probe[probe]
                 (
                     transform_rs,
-                    scaling_vecs,
                     transform_offsets,
-                    _,
                 ) = fit_rotation_params(
                     reticle_pts=reticle_coords,
                     probe_pts=probe_coords,
-                    find_scaling=True,
                 )
                 transforms[calfile][probe] = {
-                    "scaling": {
-                        "rotation": transform_rs,
-                        "offset": transform_offsets,
-                        "scale": scaling_vecs,
-                    }
-                }
-                transform_rs, transform_offsets, _ = fit_rotation_params(
-                    reticle_pts=reticle_coords,
-                    probe_pts=probe_coords,
-                    find_scaling=False,
-                )
-                transforms[calfile][probe]["no_scaling"] = {
                     "rotation": transform_rs,
                     "offset": transform_offsets,
-                    "scale": None,
                 }
         hole_num = row["Hole #"]
         probe_pt = np.array([row[dim] for dim in ["X", "Y", "Z"]]) / 1000
         thisprobe = row["Probe"]
-        used_scaling = row["Scaling used?"] == "yes"
-        fit_type = "scaling" if used_scaling else "no_scaling"
         hole_measures_ras[hole_num] = transform_probe_to_bregma(
             probe_pt,
-            transforms[calfile][thisprobe][fit_type]["rotation"],
-            transforms[calfile][thisprobe][fit_type]["offset"],
-            transforms[calfile][thisprobe][fit_type]["scale"],
+            transforms[calfile][thisprobe]["rotation"],
+            transforms[calfile][thisprobe]["offset"],
         )
 
 # %%
