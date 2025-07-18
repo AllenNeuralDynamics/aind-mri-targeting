@@ -1,3 +1,9 @@
+## v0.1.4 (2025-07-18)
+
+### Fix
+
+- Update to use aind-mri-utils v0.10
+
 ## v0.1.3 (2025-07-11)
 
 ### Fix
