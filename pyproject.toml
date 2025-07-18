@@ -37,10 +37,11 @@ install_notebooks = "aind_mri_targeting.scripts.install_notebooks:main"
 calculate_headframe_transforms = "aind_mri_targeting.scripts.calculate_headframe_transforms:main"
 fit_implant = "aind_mri_targeting.scripts.fit_implant:main"
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = ['codespell', 'pytest', 'pytest-cov', 'ruff', 'interrogate']
-vscode = ['aind-mri-targeting[dev]', 'ipykernel', 'pip']
+vscode = [{include-group = 'dev'}, 'ipykernel', 'pip']
 docs = [
+  {include-group = 'dev'},
   'mkdocs',
   'mkdocs-material',
   'mkdocstrings[python]',
