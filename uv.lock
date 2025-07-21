@@ -25,7 +25,7 @@ wheels = [
 
 [[package]]
 name = "aind-mri-targeting"
-version = "0.1.3"
+version = "0.1.4"
 source = { editable = "." }
 dependencies = [
     { name = "aind-anatomical-utils" },
@@ -39,7 +39,7 @@ dependencies = [
     { name = "trimesh", extra = ["recommend"] },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "codespell" },
     { name = "interrogate" },
@@ -48,10 +48,14 @@ dev = [
     { name = "ruff" },
 ]
 docs = [
+    { name = "codespell" },
+    { name = "interrogate" },
     { name = "mkdocs" },
     { name = "mkdocs-material" },
     { name = "mkdocstrings", extra = ["python"] },
     { name = "pymdown-extensions" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
     { name = "ruff" },
 ]
 vscode = [
@@ -67,31 +71,46 @@ vscode = [
 [package.metadata]
 requires-dist = [
     { name = "aind-anatomical-utils", specifier = ">=0.1,<0.2" },
-    { name = "aind-mri-targeting", extras = ["dev"], marker = "extra == 'vscode'" },
     { name = "aind-mri-utils", specifier = ">=0.10,<2" },
-    { name = "codespell", marker = "extra == 'dev'" },
-    { name = "interrogate", marker = "extra == 'dev'" },
-    { name = "ipykernel", marker = "extra == 'vscode'" },
-    { name = "mkdocs", marker = "extra == 'docs'" },
-    { name = "mkdocs-material", marker = "extra == 'docs'" },
-    { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'" },
     { name = "numpy", specifier = ">=1.20,<3" },
     { name = "pandas", specifier = ">=2,<3" },
-    { name = "pip", marker = "extra == 'vscode'" },
-    { name = "pymdown-extensions", marker = "extra == 'docs'" },
     { name = "pynrrd", specifier = ">=1,<2" },
-    { name = "pytest", marker = "extra == 'dev'" },
-    { name = "pytest-cov", marker = "extra == 'dev'" },
-    { name = "ruff", marker = "extra == 'dev'" },
-    { name = "ruff", marker = "extra == 'docs'" },
     { name = "simpleitk", specifier = ">=2,<3" },
     { name = "trimesh", extras = ["recommend"], specifier = ">=4,<5" },
 ]
-provides-extras = ["dev", "vscode", "docs"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "codespell" },
+    { name = "interrogate" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+]
+docs = [
+    { name = "codespell" },
+    { name = "interrogate" },
+    { name = "mkdocs" },
+    { name = "mkdocs-material" },
+    { name = "mkdocstrings", extras = ["python"] },
+    { name = "pymdown-extensions" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+]
+vscode = [
+    { name = "codespell" },
+    { name = "interrogate" },
+    { name = "ipykernel" },
+    { name = "pip" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+]
 
 [[package]]
 name = "aind-mri-utils"
-version = "0.10.0"
+version = "0.10.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aind-anatomical-utils" },
@@ -111,9 +130,9 @@ dependencies = [
     { name = "simpleitk" },
     { name = "trimesh" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/17/0f/dc44c5a1a0fc54c6ed7dc13ec5bfa53b28789fcb8721a1694ed604366e9d/aind_mri_utils-0.10.0.tar.gz", hash = "sha256:e9a582c60e97bae7b695b867d7517d0a9f7f2aef77dc4d22b214f89a045fd88e", size = 278674, upload-time = "2025-07-17T22:25:35.781Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/da/b6/cf7c16c69a49df50fbba976c2a5bb5bc824ca9e069ab2288a90680fa69ac/aind_mri_utils-0.10.1.tar.gz", hash = "sha256:88df9a3c9bf09a274d3ce5562f4f2eb45f12e2b3236a2acec450ea856c5d1cb5", size = 258560, upload-time = "2025-07-18T22:35:46.634Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4d/ca/83373f97f4b6bc380fb8f5304f696ab8a4ede2787a2f62b5403d1f34e5c2/aind_mri_utils-0.10.0-py3-none-any.whl", hash = "sha256:f761a089083e10f4ff82baefcfa579b83d97ce976dea74c1eb7b63a89f670b35", size = 50479, upload-time = "2025-07-17T22:25:34.812Z" },
+    { url = "https://files.pythonhosted.org/packages/c5/ac/45b708f3ffec8a7430eb38ed20209d67e5d6b60d29e07814f7b9a49a8610/aind_mri_utils-0.10.1-py3-none-any.whl", hash = "sha256:7df9c13acbe867e76c5db79532c32c751c411d35ebd930be463823f0790db0ac", size = 50325, upload-time = "2025-07-18T22:35:45.506Z" },
 ]
 
 [[package]]
