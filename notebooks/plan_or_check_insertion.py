@@ -20,6 +20,7 @@ import logging
 import os
 from pathlib import Path
 
+import k3d
 import numpy as np
 import pandas as pd
 import SimpleITK as sitk
@@ -323,6 +324,10 @@ insertion_trim_coordinates_struct = {}
 
 # %%
 implant_R, implant_t, implant_c = load_sitk_transform(implant_fit_transform_file)
+
+plot = k3d.plot()
+plot.display()
+plot.grid_visible = False
 
 S = trimesh.Scene()
 transformed_implant_targets = {}
