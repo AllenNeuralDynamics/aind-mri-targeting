@@ -13,13 +13,13 @@
 #     name: python3
 # ---
 
+# %%
 import datetime
 import logging
-
-# %%
 import os
 from pathlib import Path
 
+import k3d
 import numpy as np
 import pandas as pd
 import SimpleITK as sitk
@@ -36,6 +36,7 @@ from aind_mri_utils.implant import make_hole_seg_dict
 from aind_mri_utils.meshes import (
     apply_transform_to_trimesh,
     load_newscale_trimesh,
+    mask_to_trimesh,
 )
 from aind_mri_utils.reticle_calibrations import (
     combine_parallax_and_manual_calibrations,
@@ -57,14 +58,14 @@ from scipy.spatial.transform import Rotation
 logging.basicConfig(format="%(message)s", level=logging.DEBUG)
 # %%
 # File Paths
-mouse = "786866"
+mouse = "786864"
 reticle_used = "H"
 target_structures = ["PL", "CLA", "MD", "CA1", "VM", "BLA", "RSP"]
 
 WHOAMI = "Galen"
 
 if WHOAMI == "Galen":
-    base_path = Path("/mnt/aind1-vast/scratch")
+    base_path = Path("/mnt/vast/scratch")
 elif WHOAMI == "Yoni":
     base_path = Path(r"Y:/")
 else:
@@ -75,21 +76,20 @@ else:
 annotations_path = base_path / "ephys/persist/data/MRI/processed/{}".format(mouse)
 image_path = annotations_path / "{}_100.nii.gz".format(mouse)
 labels_path = annotations_path / "{}_HeadframeHoles.seg.nrrd".format(mouse)
-brain_mask_path = annotations_path / "{}_manual_skull_strip.nrrd".format(mouse)
+brain_mask_path = annotations_path / "{}_auto_skull_strip.nrrd".format(mouse)
 image_transform_file = annotations_path / "com_plane.h5"
 structure_mask_path = annotations_path / "Masks"
-structure_files = {structure: structure_mask_path / f"{mouse}{structure}Mask.obj" for structure in target_structures}
-brain_mesh_path = structure_mask_path / "{}_manual_skull_strip.obj".format(mouse)
+structure_files = {structure: structure_mask_path / f"{mouse}-{structure}-Mask.nrrd" for structure in target_structures}
+brain_mesh_path = structure_mask_path / "{}_auto_skull_strip.obj".format(mouse)
 
 # Implant annotation
 # Note that this can be different than the image annotation,
 # this is in the event that an instion is planned with data from multiple scans
 # (see 750107 for example).
-implant_annoation_path = base_path / "ephys/persist/data/MRI/processed/{}".format(mouse)
-headframe_transform_file = implant_annoation_path / "com_plane.h5"
-implant_file = implant_annoation_path / "{}_ImplantHoles.seg.nrrd".format(mouse)
-implant_mesh_file = implant_annoation_path / "{}_ImplantHoles.obj".format(mouse)
-implant_fit_transform_file = implant_annoation_path / "{}_implant_fit.h5".format(mouse)
+implant_annotation_path = base_path / "ephys/persist/data/MRI/processed/{}".format(mouse)
+headframe_transform_file = implant_annotation_path / "com_plane.h5"
+implant_file = implant_annotation_path / "{}_ImplantHoles.seg.nrrd".format(mouse)
+implant_fit_transform_file = implant_annotation_path / "{}_implant_fit.h5".format(mouse)
 
 
 # OBJ files
@@ -107,14 +107,13 @@ probe_model_files = {
 }
 
 headframe_file = model_path / "TenRunHeadframe.obj"
-holes_file = model_path / "OneOff_HolesOnly.obj"
 cone_file = model_path / "TacoForBehavior" / "0160-200-72_X06.obj"
 well_file = model_path / "WHC_Well" / "0274-400-07_X02.obj"
 implant_model_file = model_path / "0283-300-04.obj"
 
 calibration_path = base_path / "ephys/persist/data/probe_calibrations/CSVCalibrations/"
-calibration_file = calibration_path / "calibration_info_np2_2025_03_18T08_39_00.xlsx"
-parallax_calibration_dir = calibration_path / "log_20250303_122136"
+calibration_file = calibration_path / "calibration_info_np2_2023_07_16T16_11_00.xlsx"
+parallax_calibration_dir = []
 iso_time = datetime.datetime.now().astimezone().strftime("%Y-%m-%dT%H%M%S%z")
 plan_save_path = annotations_path / f"{mouse}_InsertionPlan_{iso_time}.csv"
 
@@ -151,11 +150,6 @@ brain_pos = np.zeros(idx.shape)
 brain_pos = np.vstack([mask.TransformIndexToPhysicalPoint(idx[ii, :].tolist()) for ii in range(idx.shape[0])])
 brain_pos = brain_pos[np.arange(0, brain_pos.shape[0], brain_pos.shape[0] // 1000)]
 
-# Load the brain mesh
-brain_mesh = trimesh.load(
-    str(brain_mesh_path),
-    force="Mesh",
-)
 
 implant_seg_vol = sitk.ReadImage(str(implant_file))
 
@@ -201,9 +195,6 @@ chem_image_R, chem_image_t = compose_transforms(chem_shift_image_R, chem_shift_i
 # %%
 
 transformed_brain = apply_rotate_translate(brain_pos, *invert_rotate_translate(chem_image_R, chem_image_t))
-transformed_brain_mesh = apply_transform_to_trimesh(
-    brain_mesh.copy(), *invert_rotate_translate(chem_image_R, chem_image_t)
-)
 transformed_implant_targets = apply_rotate_translate(
     implant_targets, *invert_rotate_translate(headframe_R, headframe_t)
 )
@@ -219,7 +210,6 @@ if calibration_file is None:
         parallax_calibration_dir,
         reticle_offset,
         reticle_rotation,
-        find_scaling=True,
     )
     global_offset = reticle_offset
 else:
@@ -232,106 +222,76 @@ probes_used = list(cal_by_probe_combined.keys())
 
 # %%
 probe_to_target_mapping = {
-    "PL": 45883,
-    "CLA": 46110,
-    "MD": 46116,
-    "VM": 46100,
-    "CA1": 46113,
-    "BLA": 46122,
-    "RSP": 50209,
+    "PL": 46811,
+    "CLA": 46810,
+    "MD": 50213,
+    "VM": 50210,
+    "CA1": 50720,
+    "BLA": 50197,
+    "RSP": 46101,
 }
 
 # %%
 arcs = {
-    "a": 18,
-    "b": 2,
-    "c": -12.745,
-    "d": -30,
+    "a": 17,
+    "b": -8,
+    "c": -24,
+    "d": -42,
 }
-probe_by_struct = {
-    "PL": "quadbase",
-    "CLA": "2.1-alpha",
-    "MD": "2.4",
-    "CA1": "2.1-alpha",
-    "VM": "2.1-alpha",
-    "BLA": "2.1",
-    "RSP": "2.1",
+probe_info_by_struct = {
+    "PL": {"type": "quadbase", "arc": "b", "slider_ml": -30, "spin": 135},
+    "CLA": {"type": "2.1", "arc": "d", "slider_ml": -27, "spin": 0},
+    "MD": {"type": "quadbase", "arc": "a", "slider_ml": -10, "spin": -45},
+    "CA1": {"type": "2.1", "arc": "c", "slider_ml": 6, "spin": -180},
+    "VM": {"type": "2.1", "arc": "c", "slider_ml": -20, "spin": 0},
+    "BLA": {"type": "2.1", "arc": "b", "slider_ml": 27, "spin": 50},
+    "RSP": {"type": "2.1", "arc": "c", "slider_ml": 22, "spin": -100},
 }
-arc_by_struct = {
-    "PL": "a",
-    "CLA": "a",
-    "MD": "c",
-    "CA1": "b",
-    "VM": "b",
-    "BLA": "d",
-    "RSP": "d",
-}
-arc_ap_by_struct = {k: arcs[v] for k, v in arc_by_struct.items()}
-slider_ml_by_struct = {
-    "PL": -20,
-    "CLA": 29.5,
-    "MD": -23,
-    "CA1": 25,
-    "VM": -19,
-    "BLA": 3,
-    "RSP": 19,
-}
-spin_by_struct = {
-    "PL": -45,
-    "CLA": 145,
-    "MD": 90,
-    "CA1": 90,
-    "VM": -90,
-    "BLA": 110,
-    "RSP": 135,
+target_info_by_struct = {
+    "PL": {"offsets": np.array([-0.25, 0.25]), "depth": 2.4, "hole": 1},
+    "CLA": {"offsets": np.array([0.0, -0.4]), "depth": 5.5, "hole": 12},
+    "MD": {"offsets": np.array([0, -0.35]), "depth": 4, "hole": 3},
+    "CA1": {"offsets": np.array([-0.1, 0.4]), "depth": 6.5, "hole": 10},
+    "VM": {"offsets": np.array([0, 0.2]), "depth": 4.9, "hole": 6},
+    "BLA": {"offsets": np.array([0, 0.1]), "depth": 5.75, "hole": 4},
+    "RSP": {"offsets": np.array([0, 0]), "depth": 2, "hole": 5},
 }
 
-# This should be the x offset and the inverse of the y offset
-offsets_LP_by_struct = {
-    "PL": [-0.25, 0.25],
-    "CLA": [0.0, -0.4],
-    "MD": [0, -0.35],
-    "CA1": [-0.1, 0.4],
-    "VM": [0, 0.2],
-    "BLA": [0, 0.1],
-    "RSP": [0, 0],
-}
-offsets_LP_arr_by_struct = {k: np.array(v) for k, v in offsets_LP_by_struct.items()}
+probe_by_struct = {}
+arc_by_struct = {}
+slider_ml_by_struct = {}
+spin_by_struct = {}
+for k, v in probe_info_by_struct.items():
+    probe_by_struct[k] = v["type"]
+    arc_by_struct[k] = v["arc"]
+    slider_ml_by_struct[k] = v["slider_ml"]
+    spin_by_struct[k] = v["spin"]
 
-target_depth = np.array([2.4, 4.75, 4, 5.8, 4.9, 5.75, 2])  # Guesses, check
-depth_by_struct = {
-    "PL": 2.4,
-    "CLA": 5.5,
-    "MD": 4,
-    "CA1": 6.5,
-    "VM": 4.9,
-    "BLA": 5.75,
-    "RSP": 2,
-}
-
-hole_by_struct = {
-    "PL": 1,
-    "CLA": 2,
-    "MD": 6,
-    "CA1": 4,
-    "VM": 8,
-    "BLA": 10,
-    "RSP": 5,
-}
+offsets_LP_by_struct = {}
+depth_by_struct = {}
+hole_by_struct = {}
+for k, v in target_info_by_struct.items():
+    offsets_LP_by_struct[k] = v["offsets"]
+    depth_by_struct[k] = v["depth"]
+    hole_by_struct[k] = v["hole"]
 
 insertion_trim_coordinates_struct = {}
 
 # %%
 implant_R, implant_t, implant_c = load_sitk_transform(implant_fit_transform_file)
 
+plot = k3d.plot()
+plot.display()
+plot.grid_visible = False
+
 S = trimesh.Scene()
-transformed_implant_targets = {}
+transformed_model_implant_targets = {}
 
 for i, key in enumerate(model_implant_targets.keys()):
     implant_tgt = model_implant_targets[key]
     implant_tgt = apply_rotate_translate(implant_tgt, *invert_rotate_translate(implant_R, implant_t))
     implant_tgt = apply_rotate_translate(implant_tgt, *invert_rotate_translate(headframe_R, headframe_t))
-    transformed_implant_targets[key] = implant_tgt
+    transformed_model_implant_targets[key] = implant_tgt
 
 vertices = apply_rotate_translate(implant_model_lps, *invert_rotate_translate(implant_R, implant_t))
 vertices = apply_rotate_translate(vertices, *invert_rotate_translate(headframe_R, headframe_t))
@@ -347,6 +307,9 @@ wellCM = trimesh.collision.CollisionManager()
 from_calibration = True
 ras_to_lps = np.diag([-1, -1, 1])
 final_target_by_struct = {}
+original_structure_meshes = {}
+structure_calibration_angles = {}
+
 for i, structure in enumerate(target_structures):
     if structure not in [
         # "PL",
@@ -364,7 +327,7 @@ for i, structure in enumerate(target_structures):
     probe_type = probe_by_struct[structure]
     ap_angle = arcs[arc_by_struct[structure]]
     ml_angle = slider_ml_by_struct[structure]
-    LP_offset = offsets_LP_arr_by_struct[structure]
+    LP_offset = offsets_LP_by_struct[structure]
     depth = depth_by_struct[structure]
     probe_model = probe_models[probe_type].copy()
     hole_number = hole_by_struct[structure]
@@ -390,14 +353,12 @@ for i, structure in enumerate(target_structures):
 
     if from_calibration:
         this_probe = probe_to_target_mapping[structure]
-        this_affine, this_translation, this_scaling = cal_by_probe_combined[this_probe]
+        this_affine, this_translation = cal_by_probe_combined[this_probe]
         insertion_vector = ras_to_lps @ np.linalg.inv(this_affine) @ np.array([0, 0, depth])
         insertion_trims = insertion_trim_coordinates_struct.get(structure, np.array([0, 0, 0]))
         combined_bregma_vector = adjusted_insertion_pt + insertion_vector + insertion_trims
-        scaling_inv = np.diag(1 / this_scaling)
-        rigid_affine = scaling_inv @ this_affine
-        this_ap, this_ml = find_probe_angle(rigid_affine)
-
+        this_ap, this_ml = find_probe_angle(this_affine)
+        structure_calibration_angles[structure] = (this_ap, this_ml)
         R_probe_mesh = arc_angles_to_affine(this_ap, this_ml, spin)
 
         probe_model = apply_transform_to_trimesh(probe_model, R_probe_mesh, combined_bregma_vector)
@@ -418,12 +379,13 @@ for i, structure in enumerate(target_structures):
     structureCM.add_object("probe", probe_model)
 
     # Load and transform the target structure
-    this_target_mesh = trimesh.load(
-        str(structure_files[structure]),
-        force="Mesh",
-    )
-    trimesh.repair.fix_normals(this_target_mesh)
-    trimesh.repair.fix_inversion(this_target_mesh)
+    if structure in original_structure_meshes:
+        this_target_mesh = original_structure_meshes[structure].copy()
+    else:
+        this_target_mesh = mask_to_trimesh(sitk.ReadImage(str(structure_files[structure])))
+        trimesh.repair.fix_normals(this_target_mesh)
+        trimesh.repair.fix_inversion(this_target_mesh)
+        original_structure_meshes[structure] = this_target_mesh.copy()
 
     vertices = this_target_mesh.vertices
     vertices = apply_rotate_translate(vertices, *invert_rotate_translate(chem_image_R, chem_image_t))
@@ -432,7 +394,7 @@ for i, structure in enumerate(target_structures):
     # Assign the same color to the structure
     this_target_mesh.visual.face_colors = this_color
     this_target_mesh.visual.vertex_colors = this_color
-    this_target_mesh.visual.material.main_color[:] = this_color
+    this_target_mesh.visual.main_color[:] = this_color
 
     # Add structure to the scene and collision manager
     S.add_geometry(this_target_mesh)
