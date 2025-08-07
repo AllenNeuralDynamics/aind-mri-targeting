@@ -17,13 +17,14 @@ readme = "README.md"
 version = "0.1.4"
 
 dependencies = [
-  'aind-anatomical-utils>=0.1,<0.2',
-  'aind_mri_utils>=0.10,<2',
-  'numpy>=1.20,<3',
+  "aind-anatomical-utils>=0.1,<0.2",
+  "aind_mri_utils>=0.10,<2",
+  "k3d>=2,<3",
+  "numpy>=1.20,<3",
   "pandas>=2,<3",
-  'pynrrd>=1,<2',
-  'SimpleITK>=2,<3',
-  'trimesh[recommend]>=4,<5',
+  "pynrrd>=1,<2",
+  "SimpleITK>=2,<3",
+  "trimesh[recommend]>=4,<5",
 ]
 
 [project.urls]
@@ -38,15 +39,15 @@ calculate_headframe_transforms = "aind_mri_targeting.scripts.calculate_headframe
 fit_implant = "aind_mri_targeting.scripts.fit_implant:main"
 
 [dependency-groups]
-dev = ['codespell', 'pytest', 'pytest-cov', 'ruff', 'interrogate']
-vscode = [{include-group = 'dev'}, 'ipykernel', 'pip']
+dev = ["codespell", "pytest", "pytest-cov", "ruff", "interrogate"]
+vscode = [{ include-group = "dev" }, "ipykernel", "pip", "ipympl"]
 docs = [
-  {include-group = 'dev'},
-  'mkdocs',
-  'mkdocs-material',
-  'mkdocstrings[python]',
-  'pymdown-extensions',
-  'ruff',
+  { include-group = "dev" },
+  "mkdocs",
+  "mkdocs-material",
+  "mkdocstrings[python]",
+  "pymdown-extensions",
+  "ruff",
 ]
 
 [tool.setuptools.packages.find]
@@ -57,17 +58,17 @@ readme = { file = "README.md", content-type = "text/markdown" }
 
 [tool.ruff]
 line-length = 120
-target-version = 'py313'
+target-version = "py313"
 
 [tool.ruff.lint]
-extend-select = ['Q', 'RUF100', 'C90', 'I', 'F', 'E', 'W']
+extend-select = ["Q", "RUF100", "C90", "I", "F", "E", "W"]
 extend-ignore = []
 mccabe = { max-complexity = 14 }
-pydocstyle = { convention = 'numpy' }
+pydocstyle = { convention = "numpy" }
 
 [tool.codespell]
-skip = '.git,*.pdf,*.svg,./bonsai,*.bonsai,./docs/_build,uv.lock'
-ignore-words-list = 'nd'
+skip = ".git,*.pdf,*.svg,./bonsai,*.bonsai,./docs/_build,uv.lock"
+ignore-words-list = "nd"
 
 [tool.pytest.ini_options]
 addopts = "--strict-markers --tb=short --cov=src --cov-report=term-missing --cov-fail-under=0"
@@ -93,7 +94,10 @@ exclude = [
 
 [tool.commitizen]
 version_provider = "pep621"
-version_files = ["pyproject.toml", "src/aind_mri_targeting/__init__.py:__version__"]
+version_files = [
+  "pyproject.toml",
+  "src/aind_mri_targeting/__init__.py:__version__",
+]
 update_changelog_on_bump = true
 tag_format = "v$version"
 major_version_zero = true
