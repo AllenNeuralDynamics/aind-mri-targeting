@@ -18,6 +18,7 @@
 import datetime
 import logging
 from pathlib import Path
+from typing import Dict, List
 
 import k3d
 import numpy as np
@@ -49,6 +50,8 @@ from aind_mri_utils.rotations import (
     compose_transforms,
     invert_rotate_translate,
 )
+from omegaconf import OmegaConf
+from pydantic import BaseModel, field_validator
 from scipy.spatial.transform import Rotation
 
 # %%
@@ -59,79 +62,115 @@ from scipy.spatial.transform import Rotation
 # %%
 # Set the log verbosity to get debug statements
 logging.basicConfig(format="%(message)s", level=logging.DEBUG)
+
+
+# %%
+# Attempt to use yml
+class AppConfig(BaseModel):
+    mouse: str
+    from_calibration: bool
+    target_structures: List[str]
+    reticle_offset: List[float]
+    reticle_rotation: float
+
+    base_path: Path
+
+    annotations_path: Path
+    image_path: Path
+    labels_path: Path
+    brain_mask_path: Path
+    image_transform_file: Path
+    structure_mask_path: Path
+    structure_files: Dict[str, Path]  # filled in dynamically
+    brain_mesh_path: Path
+
+    implant_annotation_path: Path
+    headframe_transform_file: Path
+    implant_file: Path
+    implant_fit_transform_file: Path
+
+    model_path: Path
+    hole_model_path: Path
+    modified_probe_mesh_file: Path
+    probe_model_files: Dict[str, Path]
+
+    headframe_file: Path
+    cone_file: Path
+    well_file: Path
+    implant_model_file: Path
+
+    calibration_path: Path
+    calibration_file: Path
+    parallax_calibration_dir: List[Path]
+
+    plan_save_path: Path
+
+    @field_validator("probe_model_files", mode="before")
+    def ensure_string_keys(cls, v):
+        return {str(k): v[k] for k in v}
+
+
+# Load YAML with OmegaConf and resolve all ${...}
+cfg = OmegaConf.load("/home/galen.lynch/786864-planning-config.yml")
+resolved = OmegaConf.to_container(cfg, resolve=True)
+
+# Build structure_files dynamically from target_structures
+structure_mask_path = Path(resolved["structure_mask_path"])
+mouse = resolved["mouse"]
+resolved["structure_files"] = {
+    struct: structure_mask_path / f"{mouse}-{struct}-Mask.nrrd" for struct in resolved["target_structures"]
+}
+
+# Create validated Pydantic model
+app_config = AppConfig(**resolved)
+
+print(app_config.structure_files["PL"])
+
 # %%
 # Global configuration
-mouse = "786864"
-from_calibration = True
-reticle_used = "H"
-target_structures = ["PL", "CLA", "MD", "CA1", "VM", "BLA", "RSP"]
 
 # Reticle offsets and rotations
-reticle_offsets = {"H": np.array([0.076, 0.062, 0.311])}
-reticle_rotations = {"H": 0}
-
-WHOAMI = "Galen"
-
-if WHOAMI == "Galen":
-    base_path = Path("/mnt/vast/scratch")
-elif WHOAMI == "Yoni":
-    base_path = Path(r"Y:/")
-else:
-    raise ValueError("Who are you again?")
-
 # File Paths
 # Image and image annotations.
-annotations_path = base_path / "ephys/persist/data/MRI/processed/{}".format(mouse)
-image_path = annotations_path / "{}_100.nii.gz".format(mouse)
-labels_path = annotations_path / "{}_HeadframeHoles.seg.nrrd".format(mouse)
-brain_mask_path = annotations_path / "{}_auto_skull_strip.nrrd".format(mouse)
-image_transform_file = annotations_path / "com_plane.h5"
-structure_mask_path = annotations_path / "Masks"
-structure_files = {structure: structure_mask_path / f"{mouse}-{structure}-Mask.nrrd" for structure in target_structures}
-brain_mesh_path = structure_mask_path / "{}_auto_skull_strip.obj".format(mouse)
+structure_files = app_config.structure_files
+brain_mesh_path = app_config.brain_mesh_path
 
 # Implant annotation
 # Note that this can be different than the image annotation,
 # this is in the event that an instion is planned with data from multiple scans
 # (see 750107 for example).
-implant_annotation_path = base_path / "ephys/persist/data/MRI/processed/{}".format(mouse)
-headframe_transform_file = implant_annotation_path / "com_plane.h5"
-implant_file = implant_annotation_path / "{}_ImplantHoles.seg.nrrd".format(mouse)
-implant_fit_transform_file = implant_annotation_path / "{}_implant_fit.h5".format(mouse)
+implant_annotation_path = app_config.implant_annotation_path
+headframe_transform_file = app_config.headframe_transform_file
+implant_file = app_config.implant_file
+implant_fit_transform_file = app_config.implant_fit_transform_file
 
 
 # OBJ files
-model_path = base_path / "ephys/persist/data/MRI/HeadframeModels"
-hole_model_path = model_path / "HoleOBJs"
-modified_probe_mesh_file = model_path / "modified_probe_holder.obj"
+model_path = app_config.model_path
+hole_model_path = app_config.hole_model_path
+modified_probe_mesh_file = app_config.modified_probe_mesh_file
 
 
-probe_model_files = {
-    "2.1-alpha": model_path / "Centered_Newscale_2pt0.obj",
-    "2.1": model_path / "dovetailtweezer_oneShank_centered_corrected.obj",
-    "quadbase": model_path / "Quadbase_customHolder_centeredOnShank0.obj",
-    "2.4": model_path / "dovetailwtweezer_fourShank_centeredOnShank0.obj",
-    "pipette": model_path / "injection_pipette.obj",
-}
+probe_model_files = app_config.probe_model_files
 
-headframe_file = model_path / "TenRunHeadframe.obj"
-cone_file = model_path / "TacoForBehavior" / "0160-200-72_X06.obj"
-well_file = model_path / "WHC_Well" / "0274-400-07_X02.obj"
-implant_model_file = model_path / "0283-300-04.obj"
+headframe_file = app_config.headframe_file
+cone_file = app_config.cone_file
+well_file = app_config.well_file
+implant_model_file = app_config.implant_model_file
 
-calibration_path = base_path / "ephys/persist/data/probe_calibrations/CSVCalibrations/"
-calibration_file = calibration_path / "calibration_info_np2_2023_07_16T16_11_00.xlsx"
-parallax_calibration_dir = []
+calibration_path = app_config.calibration_path
+calibration_file = app_config.calibration_file
+parallax_calibration_dir = app_config.parallax_calibration_dir
 iso_time = datetime.datetime.now().astimezone().strftime("%Y-%m-%dT%H%M%S%z")
-plan_save_path = annotations_path / f"{mouse}_InsertionPlan_{iso_time}.csv"
+plan_save_path = app_config.plan_save_path
 
 # %%
 # Load the transforms
-image_R, image_t, image_c = load_sitk_transform(str(image_transform_file))
-headframe_R, headframe_t, headframe_c = load_sitk_transform(str(headframe_transform_file))
-implant_R, implant_t, implant_c = load_sitk_transform(implant_fit_transform_file)
+image_R, image_t, image_c = load_sitk_transform(str(app_config.image_transform_file))
+headframe_R, headframe_t, headframe_c = load_sitk_transform(str(app_config.headframe_transform_file))
+implant_R, implant_t, implant_c = load_sitk_transform(str(app_config.implant_fit_transform_file))
 
-image = sitk.ReadImage(str(image_path))
+image = sitk.ReadImage(str(app_config.image_path))
 
 # Load the headframe
 headframe, headframe_faces = get_vertices_and_faces(headframe_file)
@@ -148,7 +187,7 @@ implant_model, implant_faces = get_vertices_and_faces(implant_model_file)
 implant_model_lps = convert_coordinate_system(implant_model, "ASR", "LPS")  # Preserves shape!
 
 # Load the brain mask
-brain_mask_img = sitk.ReadImage(str(brain_mask_path))
+brain_mask_img = sitk.ReadImage(str(app_config.brain_mask_path))
 brain_pos = find_points_equal_to(brain_mask_img)  # Get the points where the brain mask is equal to 1
 # Downsample the brain mask to 1000 points for visualization
 brain_pos = brain_pos[np.arange(0, brain_pos.shape[0], brain_pos.shape[0] // 1000)]
@@ -176,7 +215,7 @@ hole_dict[-1] = hole_mesh
 
 # %%
 model_implant_targets = {}
-for i, hole_id in enumerate(hole_dict.keys()):
+for hole_id in hole_dict.keys():
     if hole_id < 0:
         continue
     model_implant_targets[hole_id] = hole_dict[hole_id].centroid
@@ -205,15 +244,13 @@ transformed_implant_targets = apply_rotate_translate(
 # Find calibrated probes
 
 # Read the calibrations
-reticle_offset = reticle_offsets[reticle_used]
-reticle_rotation = reticle_rotations[reticle_used]
 if calibration_file is None:
     cal_by_probe_combined, R_reticle_to_bregma = fit_rotation_params_from_parallax(
         parallax_calibration_dir,
-        reticle_offset,
-        reticle_rotation,
+        app_config.reticle_offset,
+        app_config.reticle_rotation,
     )
-    global_offset = reticle_offset
+    global_offset = app_config.reticle_offset
 else:
     cal_by_probe_combined, R_reticle_to_bregma, global_offset = combine_parallax_and_manual_calibrations(
         manual_calibration_files=calibration_file,
@@ -270,7 +307,7 @@ plot.grid_visible = False
 S = trimesh.Scene()
 transformed_model_implant_targets = {}
 
-for i, key in enumerate(model_implant_targets.keys()):
+for key in model_implant_targets.keys():
     implant_tgt = model_implant_targets[key]
     implant_tgt = apply_rotate_translate(implant_tgt, *invert_rotate_translate(implant_R, implant_t))
     implant_tgt = apply_rotate_translate(implant_tgt, *invert_rotate_translate(headframe_R, headframe_t))
@@ -292,18 +329,7 @@ final_target_by_struct = {}
 original_structure_meshes = {}
 structure_calibration_angles = {}
 
-for i, structure in enumerate(target_structures):
-    if structure not in [
-        # "PL",
-        "CLA",
-        "MD",
-        "CA1",
-        "VM",
-        "BLA",
-        "RSP",
-    ]:  # target_structures:
-        continue
-
+for structure in app_config.target_structures:
     structureCM = trimesh.collision.CollisionManager()
 
     probe_type = probe_info_by_struct["type"][structure]
@@ -333,7 +359,7 @@ for i, structure in enumerate(target_structures):
     offset[:2] = LP_offset
     adjusted_insertion_pt = implant_target + offset
 
-    if from_calibration:
+    if app_config.from_calibration:
         this_probe = probe_to_target_mapping[structure]
         this_affine, this_translation = cal_by_probe_combined[this_probe]
         insertion_vector = ras_to_lps @ np.linalg.inv(this_affine) @ np.array([0, 0, depth])
@@ -445,7 +471,7 @@ mouse_to_rig_ap = 14
 ap_angle_rig_by_struct = {k: v + mouse_to_rig_ap for k, v in arc_ap_by_struct.items()}
 bregma_dims = ["ML", "AP", "DV"]
 cols = {}
-for structure in target_structures:
+for structure in app_config.target_structures:
     if structure not in final_target_by_struct:
         continue
     cols.setdefault("Structure", []).append(structure)
@@ -479,7 +505,7 @@ ML = []
 AP = []
 DV = []
 source = []
-for i, structure in enumerate(target_structures):
+for structure in app_config.target_structures:
     probe_type = probe_info_by_struct["type"][structure]
     ap_angle = arcs[probe_info_by_struct["arc"][structure]]
     ml_angle = probe_info_by_struct["slider_ml"][structure]
