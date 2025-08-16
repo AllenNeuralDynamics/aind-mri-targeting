@@ -19,12 +19,14 @@ version = "0.1.4"
 dependencies = [
   "aind-anatomical-utils>=0.1,<0.2",
   "aind_mri_utils>=0.10,<2",
+  "ipyevents>=2,<3",
   "k3d>=2,<3",
   "numpy>=1.20,<3",
   "omegaconf>=2,<3",
   "pandas>=2,<3",
   "pydantic>=2,<3",
   "pynrrd>=1,<2",
+  "python-fcl>=0.7,<0.8",
   "SimpleITK>=2,<3",
   "trimesh[recommend]>=4,<5",
 ]

@@ -9,16 +9,16 @@ import trimesh
 from aind_anatomical_utils.coordinate_systems import convert_coordinate_system
 from aind_mri_utils.file_io.simpleitk import load_sitk_transform
 from aind_mri_utils.implant import make_hole_seg_dict
+from aind_mri_utils.plots import make_3d_ax_look_normal
 from aind_mri_utils.reticle_calibrations import fit_rotation_params_from_manual_calibration, transform_probe_to_bregma
 from aind_mri_utils.rotations import (
     apply_rotate_translate,
     invert_rotate_translate,
 )
-from aind_mri_utils.plots import make_3d_ax_look_normal
 from matplotlib import pyplot as plt
 
 # %%
-#%matplotlib ipympl
+# %matplotlib ipympl
 # %%
 mouse = "786864"
 WHOAMI = "Galen"
@@ -121,11 +121,9 @@ for i, key in enumerate(model_implant_targets.keys()):
 
 # %%
 lps_to_ras = np.diag(np.array([-1, -1, 1]))
-transformed_model_implant_targets_ras =  np.vstack(
-    list(transformed_model_implant_targets_lps.values())
-) @ lps_to_ras
+transformed_model_implant_targets_ras = np.vstack(list(transformed_model_implant_targets_lps.values())) @ lps_to_ras
 transformed_implant_targets_ras = transformed_implant_targets_lps @ lps_to_ras
-measured_hole_locations_ras = np.vstack(list(hole_locations_bregma.values())) 
+measured_hole_locations_ras = np.vstack(list(hole_locations_bregma.values()))
 
 plot_pts = {
     "segmentation": transformed_implant_targets_ras,
