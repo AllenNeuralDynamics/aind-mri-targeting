@@ -25,6 +25,7 @@ dependencies = [
   "pandas>=2,<3",
   "pydantic>=2,<3",
   "pynrrd>=1,<2",
+  "python-fcl>=0.7,<0.8",
   "SimpleITK>=2,<3",
   "trimesh[recommend]>=4,<5",
 ]
