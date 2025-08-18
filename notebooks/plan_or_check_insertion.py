@@ -20,14 +20,14 @@ from __future__ import annotations
 import logging
 import threading
 from collections import OrderedDict
-from dataclasses import dataclass, field, replace
-from enum import IntFlag, auto
+from dataclasses import dataclass, field
+from enum import Enum, IntFlag, auto
 from functools import cached_property
 from pathlib import Path
 from typing import (
+    Annotated,
     Any,
     Callable,
-    Dict,
     FrozenSet,
     Generic,
     Iterable,
@@ -59,15 +59,13 @@ from aind_mri_utils.chemical_shift import (
     compute_chemical_shift,
 )
 from aind_mri_utils.file_io.simpleitk import load_sitk_transform
-from aind_mri_utils.implant import make_hole_seg_dict
 from aind_mri_utils.meshes import (
-    load_newscale_trimesh,
     mask_to_trimesh,
 )
-from aind_mri_utils.plots import hex_string_to_int, rgb_to_hex_string
+from aind_mri_utils.plots import hex_string_to_int
 from aind_mri_utils.reticle_calibrations import (
-    combine_parallax_and_manual_calibrations,
     find_probe_angle,
+    fit_rotation_params_from_manual_calibration,
     fit_rotation_params_from_parallax,
 )
 from aind_mri_utils.rotations import (
@@ -79,7 +77,8 @@ from ipyevents import Event
 from IPython.display import display
 from numpy.typing import NDArray
 from omegaconf import OmegaConf
-from pydantic import BaseModel, DirectoryPath, Field, FilePath, computed_field, field_validator, model_validator
+from pydantic import BaseModel, DirectoryPath, Field, FilePath, field_validator, model_validator
+from scipy.spatial.transform import Rotation
 
 Pair = Tuple[str, str]
 # %%
@@ -93,156 +92,701 @@ logging.basicConfig(format="%(message)s", level=logging.DEBUG)
 
 # %%
 # Location of configuration files, if present
-config_files = {
-    "app_config": Path("/home/galen.lynch/786864-planning-config.yml"),
-    "probe_config": Path("/home/galen.lynch/786864-probe-config.yml"),
-}
 
 
 # %%
 # Classes
 
 
-## Configuration classes
-class CalibrationInfo(BaseModel):
-    """
-    Information about the calibration of each probe
-    """
-
-    probe_for_target: Dict[str, str]  # structure → probe ID
-    calibration_path: Path
-    calibration_files: List[Path]
-    parallax_calibration_dirs: List[Path] = Field(default_factory=list)
-
-
-class AppConfig(BaseModel):
-    """
-    Global configuration and location of required data assets
-    """
-
-    mouse: str
-    target_structures: List[str]
-    reticle_offset: List[float]
-    reticle_rotation: float
-
-    base_path: DirectoryPath
-
-    annotations_path: DirectoryPath
-    image_path: FilePath
-    headframe_annotations_path: FilePath
-    brain_mask_path: FilePath
-    structure_mask_path: DirectoryPath
-
-    headframe_transform_file: FilePath
-
-    implant_annotation_path: DirectoryPath
-    implant_annotation_file: FilePath
-    implant_fit_transform_file: FilePath
-
-    model_path: DirectoryPath
-    hole_model_path: DirectoryPath
-    probe_model_files: Dict[str, FilePath]
-
-    headframe_file: FilePath
-    cone_file: FilePath
-    well_file: FilePath
-    implant_file: FilePath
-
-    calibration_info: Optional[CalibrationInfo] = None
-
-    plan_save_path: Path
-
-    @field_validator("probe_model_files", mode="before")
-    def ensure_string_keys(cls, v):
-        return {str(k): v[k] for k in v}
-
-    @computed_field(return_type=Dict[str, FilePath])
-    @property
-    def structure_files(self) -> Dict[str, FilePath]:
-        return {
-            struct: self.structure_mask_path / f"{self.mouse}-{struct}-Mask.nrrd" for struct in self.target_structures
-        }
-
-    @computed_field(return_type=Dict[int, FilePath])
-    @property
-    def hole_model_files(self) -> Dict[int, FilePath]:
-        hole_model_path = self.hole_model_path
-        all_hole_files = hole_model_path.glob("Hole*.obj")
-        hole_dict = {}
-        for f in all_hole_files:
-            hole_num = int(f.stem.split("Hole")[-1])
-            hole_dict[hole_num] = f
-        lower_face_file = hole_model_path / "LowerFace.obj"
-        hole_dict[-1] = lower_face_file
-        return hole_dict
-
-
-class ProbeInfo(BaseModel):
-    """
-    Information about the probe type and its configuration for a specific structure.
-    """
-
-    type: str = Field(default="2.1", description="Type of the probe")
-    arc: str = Field(default="a", description="Arc identifier")
-    slider_ml: float = Field(default=0.0, description="Slider ML position")
-    spin: float = Field(default=0.0, description="Spin angle")
-
-
-class TargetInfo(BaseModel):
-    """
-    Information about the target structure, including offsets, depth, and hole number.
-    """
-
-    offsets_RA: List[float] = Field(
-        [0.0, 0.0],
-        min_items=2,
-        max_items=2,
-        description="RA Offset in the RAS coordinate system of the mouse, not manipulator",
-    )
-    depth: float = Field(default=0.0, description="Depth of the target structure")
-    target_name: Optional[str] = Field(default=None, description="Target structure or landmark name, e.g. PL or hole-1")
-    target_coordinates_RAS: Optional[List[float]] = Field(
-        default=None, description=("RAS coordinates of the target point, should be None if target_name is used")
-    )
-
-    # Ensure that either target_name or target_coordinates_RAS is set
-    @model_validator(mode="after")
-    def check_target_info(self):
-        target_name = self.target_name
-        target_coordinates_RAS = self.target_coordinates_RAS
-        if not target_name and not target_coordinates_RAS:
-            raise ValueError("Either target_name or target_coordinates_RAS must be set.")
-        if target_name and target_coordinates_RAS:
-            raise ValueError("Only one of target_name or target_coordinates_RAS must be set.")
-        return self
-
-
-class ProbeConfig(BaseModel):
-    """
-    Configuration for the probes used in the experiment, including mappings to
-    target structures, probe information, and target information.
-    """
-
-    arcs: Dict[str, float]
-    probe_info: Dict[str, ProbeInfo]
-    target_info_by_probe: Dict[str, TargetInfo]
-
-    @model_validator(mode="after")
-    def check_arc_keys(self) -> "ProbeConfig":
-        arc_keys = set(self.arcs.keys())
-        for struct, probe in self.probe_info.items():
-            if probe.arc not in arc_keys:
-                raise ValueError(
-                    f"arc '{probe.arc}' in probe_info[{struct}] is not defined in arcs: {sorted(arc_keys)}"
-                )
-        return self
-
-
 ## Run-time classes
 Float3x3 = NDArray[np.float64]  # shape (3, 3)
 Float3 = NDArray[np.float64]  # shape (3,)
 FloatNx3 = NDArray[np.float64]  # shape (3, N)
+FloatAABB = NDArray[np.float64]  # shape (2, 3)
 RawT_co = TypeVar("RawT_co", covariant=True)
+
+# -----------------------------------------------------------------------------
+# Enums & Flags (config-facing; parsed from strings in YAML)
+# -----------------------------------------------------------------------------
+
+
+class Capability(IntFlag):
+    RENDERABLE = auto()
+    MOVABLE = auto()
+    COLLIDABLE = auto()
+    SELECTABLE = auto()
+    DEFORMABLE = auto()
+    SAVABLE = auto()
+
+
+class Role(str, Enum):
+    GEOMETRY = "geometry"
+    TARGET = "target"
+    LANDMARK = "landmark"
+    ANATOMY = "anatomy"
+
+
+class Kind(str, Enum):
+    MESH = "mesh"
+    POINTS = "points"
+    LINES = "lines"
+
+
+# -----------------------------------------------------------------------------
+# Basic building blocks
+# -----------------------------------------------------------------------------
+
+
+class ImagingModel(BaseModel):
+    magnet_frequency_MHz: float
+    chem_shift_ppm_default: float = 3.7
+    chem_shift_apply_by_role: List[Role] = Field(default_factory=lambda: [Role.ANATOMY])
+    # optionally, where to read the reference image from if needed by your library
+    image_path: Optional[FilePath] = None
+
+
+ChemMode = Literal["on", "off", "auto"]
+
+
+class MaterialModel(BaseModel):
+    name: str = "default"
+    color: str = Field("#C8C8C8", description="Hex #RRGGBB")
+    opacity: float = 1.0
+    wireframe: bool = False
+    visible: bool = True
+
+    @field_validator("opacity")
+    @classmethod
+    def _opacity_range(cls, v: float) -> float:
+        if not (0.0 <= v <= 1.0):
+            raise ValueError("opacity must be in [0,1]")
+        return v
+
+
+class CanonicalizationDefModel(BaseModel):
+    source_space: Literal["ASR", "RAS", "LPS", "FILE_NATIVE"]
+    scale_to_mm: float = 1.0
+    transform: Optional[TransformRefModel] = None  # name in your transforms registry
+    version: str = "canon-v1"
+
+
+class CanonicalizationOverrideModel(BaseModel):
+    # all optional: only supplied fields override the referenced def
+    source_space: Optional[Literal["ASR", "RAS", "LPS", "FILE_NATIVE"]] = None
+    scale_to_mm: Optional[float] = None
+    transform: Optional[TransformRefModel] = None
+    version: Optional[str] = None
+
+
+class ResourceModel(BaseModel):
+    """
+    A load-once file. The loader may return a structured container:
+    - dict[str, np.ndarray] of named points
+    - dict[str|int, trimesh.Trimesh] for labelmaps
+    - GLTF scene graph keyed by node paths, etc.
+    """
+
+    key: str
+    kind: Kind  # POINTS, MESH, LABELS, GLTF, etc. (choose the set you support)
+    src: str
+    loader: str  # e.g., "named_points_npz", "labelmap_to_meshes", "gltf"
+    loader_kwargs: dict[str, Any] = Field(default_factory=dict)
+    canonicalization_ref: Optional[str] = None
+    canonicalization: Optional[CanonicalizationDefModel] = None
+    canonicalization_override: Optional[CanonicalizationOverrideModel] = None
+
+
+class SelectorBase(BaseModel):
+    kind: Literal["name", "index", "path", "label"]
+
+    def select(self, payload: Any) -> Any:
+        raise NotImplementedError
+
+
+class NameSelector(SelectorBase):
+    kind: Literal["name"]
+    name: str
+
+    def select(self, payload: Any) -> Any:
+        return payload[self.name]
+
+
+class IndexSelector(SelectorBase):
+    kind: Literal["index"]
+    index: int
+
+    def select(self, payload: Any) -> Any:
+        return payload[self.index]
+
+
+class PathSelector(SelectorBase):
+    kind: Literal["path"]  # e.g., HDF5 dataset path or GLTF node path
+    path: str
+
+    def select(self, payload: Any) -> Any:
+        return payload[self.path]
+
+
+class LabelSelector(SelectorBase):
+    kind: Literal["label"]  # e.g., integer label id or string label name
+    label: Union[int, str]
+
+    def select(self, payload: Any) -> Any:
+        return payload[self.label]
+
+
+Selector = Annotated[Union[NameSelector, IndexSelector, PathSelector, LabelSelector], Field(discriminator="kind")]
+
+
+def select_from_resource(payload: Any, selector: Selector) -> Any:
+    return selector.select(payload)
+
+
+class CollisionPolicyModel(BaseModel):
+    """Label-based policy; compile to bitmasks in loader."""
+
+    group: Optional[str] = Field(default=None, description="e.g., STATIC, FIXTURE, PROBE")
+    mask: List[str] = Field(default_factory=list, description="Labels it can collide with")
+
+
+class _TxOpBase(BaseModel):
+    invert: bool = False
+
+    def to_affine(self):
+        raise NotImplementedError("to_affine must be implemented by subclasses")
+
+
+class TranslateTxOpModel(_TxOpBase):
+    kind: Literal["translate_mm"] = "translate_mm"
+    delta: List[float] = Field(..., min_length=3, max_length=3)
+
+    def to_affine(self):
+        return AffineTransform(np.eye(3), np.array(self.delta))
+
+
+class RotateEulerTxOpModel(_TxOpBase):
+    kind: Literal["rotate_euler_deg"] = "rotate_euler_deg"
+    order: Literal["XYZ", "XZY", "YXZ", "YZX", "ZXY", "ZYX", "xyz", "xzy", "yxz", "yzx", "zxy", "zyx"] = "ZYX"
+    angles_deg: List[float] = Field(..., min_length=3, max_length=3)
+
+    def to_affine(self):
+        # Convert degrees to radians
+        # Create a rotation object using scipy
+        rotation = Rotation.from_euler(self.order, self.angles_deg, degrees=True)
+        # Get the rotation matrix
+        R = rotation.as_matrix()
+        return AffineTransform(R, np.zeros(3))
+
+
+class LoadSITKTxOpModel(_TxOpBase):
+    kind: Literal["sitk_file"] = "sitk_file"
+    path: FilePath
+    inverted: bool = False
+
+    def to_affine(self):
+        R, t, _ = load_sitk_transform(self.path)
+        return AffineTransform(R, t, self.inverted)
+
+
+TransformOp = Annotated[
+    Union[TranslateTxOpModel, RotateEulerTxOpModel, LoadSITKTxOpModel],
+    Field(discriminator="kind"),
+]
+
+
+class TransformRecipeModel(BaseModel):
+    """Sequence of ops; accepts a single op or a list and normalizes to list."""
+
+    sequence: List[TransformOp] = Field(default_factory=list)
+
+    # Allow top-level single-op form:
+    #   transforms:
+    #     fit: { kind: sitk_file, path: ... }
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_root_single_op(cls, data: Any):
+        if isinstance(data, dict) and "sequence" not in data and "kind" in data:
+            return {"sequence": [data]}
+        return data
+
+    # Allow 'sequence' itself to be a single op (dict or parsed model)
+    @field_validator("sequence", mode="before")
+    @classmethod
+    def _coerce_sequence(cls, v: Any):
+        if v is None:
+            return []
+        # if already a list, keep it
+        if isinstance(v, list):
+            return v
+        # if a single op dict (has 'kind'), wrap it
+        if isinstance(v, dict) and "kind" in v:
+            return [v]
+        # if a single parsed op model, wrap it
+        if isinstance(v, _OpBase):
+            return [v]
+        raise TypeError("sequence must be a list[TransformOp] or a single TransformOp")
+
+
+# Optional: key-or-inline reference, with the same single-op convenience
+class TransformRefModel(BaseModel):
+    key: Optional[str] = None
+    inline: Optional[TransformRecipeModel] = None
+
+    # Allow: inline: { kind: translate_mm, delta: [1,2,3] }
+    @field_validator("inline", mode="before")
+    @classmethod
+    def _coerce_inline(cls, v: Any):
+        if v is None:
+            return None
+        if isinstance(v, dict) and "sequence" not in v and "kind" in v:
+            return {"sequence": [v]}
+        return v
+
+    @model_validator(mode="after")
+    def _xor(self):
+        if bool(self.key) == bool(self.inline):
+            raise ValueError("TransformRefModel: provide exactly one of {key | inline}")
+        return self
+
+
+def compile_recipe_to_chain(recipe: TransformRecipeModel) -> TransformChain:
+    """
+    Compile a recipe to a TransformChain. We keep individual ops as separate
+    AffineTransforms (nice for debugging) but you could also pre-compose.
+    """
+    affines = [op.to_affine() for op in recipe.sequence]
+    return TransformChain.new(affines if affines else [AffineTransform.identity()])
+
+
+
+# -----------------------------------------------------------------------------
+# Catalog specs (WHAT an asset/target is; not where placed)
+# -----------------------------------------------------------------------------
+
+
+class BaseSpecModel(BaseModel):
+    key: str
+    kind: Kind
+    role: Role = Role.GEOMETRY
+    default_material: MaterialModel = Field(default_factory=MaterialModel)  # type: ignore[arg-type]
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    tags: List[str] = Field(default_factory=list)
+
+    canonicalization_ref: Optional[str] = None
+    canonicalization: Optional[CanonicalizationDefModel] = None  # inline (legacy/one-off)
+    canonicalization_override: Optional[CanonicalizationOverrideModel] = None
+
+    # capabilities are parsed from strings like ["RENDERABLE", "COLLIDABLE"]
+    caps: List[Capability] = Field(default_factory=lambda: [Capability.RENDERABLE])
+    collision: CollisionPolicyModel = Field(default_factory=CollisionPolicyModel)
+
+    # UI/layout hints
+    pivot_LPS: Optional[List[float]] = Field(default=None, min_length=3, max_length=3)
+    bbox_hint: Optional[List[List[float]]] = Field(default=None)
+
+    chem_shift: ChemMode = "auto"
+    chem_shift_ppm: Optional[float] = None
+
+    @model_validator(mode="after")
+    def _check_canon_choice(self):
+        # allow: (ref) or (inline); not both
+        if self.canonicalization_ref and self.canonicalization:
+            raise ValueError("Provide either canonicalization_ref or canonicalization, not both.")
+        return self
+
+    @field_validator("bbox_hint")
+    @classmethod
+    def _bbox_shape(cls, v):
+        if v is None:
+            return v
+        if not (isinstance(v, list) and len(v) == 2 and all(isinstance(row, list) and len(row) == 3 for row in v)):
+            raise ValueError("bbox_hint must be [[minx,miny,minz],[maxx,maxy,maxz]]")
+        return v
+
+
+class AssetSpecModel(BaseSpecModel):
+    """Geometry/points/lines that can be loaded by a named loader."""
+
+    src: Optional[Path] = None
+    loader: Optional[str] = None
+    loader_kwargs: dict[str, Any] = Field(default_factory=dict)
+
+    from_resource: Optional[str] = None
+    selector: Optional[Selector] = None
+
+    @model_validator(mode="after")
+    def _check_src_loader(self):
+        if (self.src is None) ^ (self.loader is None):
+            raise ValueError("Asset must provide both 'src' and 'loader', or neither (if injected elsewhere).")
+        if (self.src and self.loader) and (self.from_resource or self.selector):
+            raise ValueError("Choose either (src+loader) or (from_resource+selector), not both.")
+        if (self.from_resource is None) ^ (self.selector is None):
+            # only one given
+            raise ValueError("When using from_resource, you must also provide a selector.")
+        return self
+
+
+class TargetSpecModel(BaseSpecModel):
+    """Targets are points; explicit (src+loader) or derived (source_key+reducer)."""
+
+    kind: Kind = Kind.POINTS
+    role: Role = Role.TARGET
+
+    # Explicit points (file)
+    src: Optional[Path] = None
+    loader: Optional[str] = None  # e.g., "numpy_points"
+    loader_kwargs: dict[str, Any] = Field(default_factory=dict)
+
+    # Or derived from an existing asset in catalog
+    source_key: Optional[str] = None
+    reducer: Optional[str] = None
+    reducer_kwargs: dict[str, Any] = Field(default_factory=dict)
+
+    # Or resource
+    from_resource: Optional[str] = None
+    selector: Optional[Selector] = None
+    post_reducer: Optional[str] = None  # optional final reduction (e.g., COM of a selected mesh)
+    post_reducer_kwargs: dict[str, Any] = Field(default_factory=dict)
+
+    approach_vector: Optional[List[float]] = Field(default=None, min_length=3, max_length=3)
+    uncertainty_mm: Optional[float] = None
+
+    @model_validator(mode="after")
+    def _exactly_one_source(self):
+        explicit = self.src is not None and self.loader is not None
+        derived = self.source_key is not None and self.reducer is not None
+        from_res = (self.from_resource is not None) and (self.selector is not None)
+        paths = sum([explicit, derived, from_res])
+        if paths != 1:
+            raise ValueError(
+                f"{self.key}: provide exactly one of (src+loader) | (source_key+reducer) | (from_resource+selector)"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _noncollidable_default(self):
+        if Capability.COLLIDABLE in self.caps:
+            raise ValueError(f"{self.key}: targets should not be collidable by default.")
+        return self
+
+
+# -----------------------------------------------------------------------------
+# Scene (WHERE: instances and bindings)
+# -----------------------------------------------------------------------------
+
+
+class SceneNodeModel(BaseModel):
+    id: str
+    asset: str = Field(description="Key of an AssetSpec in catalog")
+    tags: List[str] = Field(default_factory=list)
+
+    # Reference a named transform (from ConfigModel.transforms) or leave None for identity
+    transform: Optional[TransformRefModel] = None
+
+    # Optional domain binding for pose (use for probes): ties node to domain.probes[name]
+    pose_source_probe: Optional[str] = Field(
+        default=None,
+        description="If set, renderer should take pose from domain.probes[pose_source_probe].",
+    )
+
+
+class SceneModel(BaseModel):
+    nodes: List[SceneNodeModel] = Field(default_factory=list)
+
+
+# -----------------------------------------------------------------------------
+# Domain (mechanics: arcs, probes, calibrations, target declarations)
+# -----------------------------------------------------------------------------
+
+
+class ProbeDeclModel(BaseModel):
+    kind: str
+    arc: str
+    slider_ml: float = 0.0
+    spin: float = 0.0
+
+    target: str = Field(description="Key of a target (TargetSpecModel.key)")
+    past_target_mm: float = 0.0
+    offsets_RA: List[float] = Field(default_factory=lambda: [0.0, 0.0], min_length=2, max_length=2)
+
+    calibrated: bool = False  # initial lock state; actual calibration affine comes from 'calibrations' map
+
+
+class CalibrationRefModel(BaseModel):
+    """Reference a specific calibration entry inside a calibration file."""
+
+    cal_id: str  # key into CalibrationsModel.files
+    probe_code: str  # 5-digit code in the file (keep as str; accept ints)
+
+    # allow shorthand "cal_id:probe_code"
+    @classmethod
+    def from_string(cls, s: str) -> "CalibrationRefModel":
+        if ":" not in s:
+            raise ValueError("Expected '<cal_id>:<probe_code>'")
+        cal_id, probe_code = s.split(":", 1)
+        return cls(cal_id=cal_id.strip(), probe_code=str(probe_code).strip())
+
+
+class CalibrationReticleModel(BaseModel):
+    """Model for calibration reticle used in calibrations"""
+
+    offset_RAS: List[float] = Field(default_factory=list, min_length=3, max_length=3)
+    rotation_z: float = 0.0
+
+
+class CalibrationSourceModel(BaseModel):
+    """
+    One calibration 'bank' source:
+      - EITHER a single file (e.g., .xlsx). In this case NO reticle is allowed.
+      - OR a directory for parallax. In this case a reticle IS REQUIRED.
+    """
+
+    file: Optional[FilePath] = Field(default=None, description="Path to a single calibration file (e.g., .xlsx)")
+    directory: Optional[DirectoryPath] = Field(default=None, description="Path to a parallax calibration directory")
+    reticle: Optional[str] = Field(default=None, description="Name of reticle (required when 'directory' is set)")
+
+    @model_validator(mode="after")
+    def _xor_and_require_reticle(self):
+        has_file = self.file is not None
+        has_dir = self.directory is not None
+        if has_file == has_dir:
+            # both set or both None → invalid
+            raise ValueError("Specify exactly one of 'file' or 'directory' in a calibration source")
+
+        if has_file and self.reticle is not None:
+            # forbid reticle with file
+            raise ValueError("'reticle' must not be provided when 'file' is used")
+
+        if has_dir and not self.reticle:
+            # require reticle with directory
+            raise ValueError("'reticle' is required when 'directory' is used")
+
+        return self
+
+
+class CalibrationsModel(BaseModel):
+    files: dict[str, CalibrationSourceModel] = Field(default_factory=dict)
+    # domain_probe_name → either {"cal_id": "...", "probe_code": "..."} OR "cal_id:probe_code"
+    probe_to_ref: dict[str, Union[CalibrationRefModel, str]] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _normalize_refs(self):
+        # convert any string refs to CalibrationRefModel
+        normalized: dict[str, CalibrationRefModel] = {}
+        for probe_name, ref in self.probe_to_ref.items():
+            if isinstance(ref, str):
+                normalized[probe_name] = CalibrationRefModel.from_string(ref)
+            else:
+                normalized[probe_name] = ref
+        object.__setattr__(self, "probe_to_ref", normalized)
+        return self
+
+
+class PlanningModel(BaseModel):
+    arcs: dict[str, float] = Field(default_factory=dict, description="arc_id → AP angle (deg)")
+    probes: dict[str, ProbeDeclModel] = Field(default_factory=dict, description="probe_name → probe declaration")
+    reticles: dict[str, CalibrationReticleModel] = Field(default_factory=dict)
+    calibrations: CalibrationsModel = Field(default_factory=CalibrationsModel)
+    # Targets can live in the catalog (TargetSpecModel), or you can also allow simple inline targets here if desired.
+
+
+# -----------------------------------------------------------------------------
+# Transforms, Paths, Options
+# -----------------------------------------------------------------------------
+
+
+class PathsModel(BaseModel):
+    """Freeform helper; keep loose so Hydra/OmegaConf interpolation is easy."""
+
+    __root__: dict[str, Any] = Field(default_factory=dict)
+
+
+class OptionsModel(BaseModel):
+    color_map: str = "rainbow"
+    remove_last_color: bool = True
+
+
+# -----------------------------------------------------------------------------
+# Root config (everything together) + cross-reference validation
+# -----------------------------------------------------------------------------
+
+
+class ConfigModel(BaseModel):
+    version: int = 1
+
+    paths: PathsModel = Field(default_factory=PathsModel)
+    imaging: Optional[ImagingModel] = None
+    # Catalog
+    resources: List[ResourceModel] = Field(default_factory=list)
+    assets: List[AssetSpecModel] = Field(default_factory=list)
+    targets: List[TargetSpecModel] = Field(default_factory=list)
+
+    # Scene
+    scene: SceneModel = Field(default_factory=SceneModel)
+
+    # Domain
+    plan: PlanningModel = Field(default_factory=PlanningModel)
+
+    # Named transforms & misc
+    transforms: dict[str, TransformRecipeModel] = Field(default_factory=dict)
+    canonicalizations: dict[str, CanonicalizationDefModel] = Field(default_factory=dict)
+    options: OptionsModel = Field(default_factory=OptionsModel)
+
+    # ---------- Cross-file integrity checks ----------
+    @model_validator(mode="after")
+    def _xref(self):
+        asset_keys = {a.key for a in self.assets}
+        target_keys = {t.key for t in self.targets}
+        arc_ids = set(self.plan.arcs.keys())
+        probe_names = set(self.plan.probes.keys())
+        transform_keys = set(self.transforms.keys())
+
+        errors: List[str] = []
+        # Scene nodes must point to existing assets
+        for n in self.scene.nodes:
+            if n.asset not in asset_keys:
+                errors.append(f"scene.nodes[{n.id}].asset '{n.asset}' not found in assets catalog")
+            if n.transform is not None and n.transform not in transform_keys:
+                errors.append(f"scene.nodes[{n.id}].transform_key='{n.transform}' not found in transforms")
+            if n.pose_source_probe is not None and n.pose_source_probe not in probe_names:
+                errors.append(f"scene.nodes[{n.id}].pose_source_probe='{n.pose_source_probe}' not in domain.probes")
+
+        # Targets (derived) must reference existing assets
+        for t in self.targets:
+            if t.source_key is not None and t.source_key not in asset_keys:
+                errors.append(f"target '{t.key}' source_key '{t.source_key}' not found in assets")
+
+        # Probes must reference valid arcs and targets
+        for pname, p in self.plan.probes.items():
+            if p.arc not in arc_ids:
+                errors.append(f"domain.probes['{pname}'] arc '{p.arc}' not found in domain.arcs")
+            if p.target not in target_keys:
+                errors.append(f"domain.probes['{pname}'] target '{p.target}' not found in targets")
+
+        # Reticles must exist and be referenced by calibration files
+        reticle_names = set(self.plan.reticles.keys())
+        cal_files = self.plan.calibrations.files
+        probe_names = set(self.plan.probes.keys())
+
+        # Every calibration file must reference an existing reticle
+        for cal_id, cal in cal_files.items():
+            if cal.reticle not in reticle_names:
+                errors.append(
+                    f"calibrations.files['{cal_id}'] references reticle '{cal.reticle}' "
+                    f"which is not defined in domain.reticles"
+                )
+
+        # probe_to_ref must reference existing probes and calibration file IDs
+        for probe_name, ref in self.plan.calibrations.probe_to_ref.items():
+            if probe_name not in probe_names:
+                errors.append(f"calibrations.probe_to_ref contains '{probe_name}' not in domain.probes")
+            if ref.cal_id not in cal_files:  # type: ignore[reportAttributeAccessIssue]
+                errors.append(
+                    f"calibrations.probe_to_ref['{probe_name}'].cal_id '{ref.cal_id}' not found in calibrations.files"  # type: ignore[reportAttributeAccessIssue]
+                )
+        # Canonicalization
+        # --- helper to resolve & check a spec-like object (Resource/Asset/Target) ---
+
+        def _check_transform_ref(ref: Optional["TransformRefModel"], where: str) -> None:
+            """If a TransformRef uses a key, it must exist in config.transforms."""
+            if ref and ref.key and ref.key not in self.transforms:
+                errors.append(f"{where}: transform key '{ref.key}' not found in transforms")
+
+        def _check_canon_def(cdef: Optional["CanonicalizationDefModel"], where: str) -> None:
+            if not cdef:
+                return
+            _check_transform_ref(cdef.transform, f"{where}.canonicalization.transform")
+
+        def _check_spec_like(spec, where: str) -> None:
+            # 1) canonicalization_ref must exist (if provided)
+            cref = getattr(spec, "canonicalization_ref", None)
+            if cref:
+                base = self.canonicalizations.get(cref)
+                if base is None:
+                    errors.append(f"{where} '{getattr(spec, 'key', '?')}': canonicalization_ref '{cref}' not found")
+                else:
+                    # referenced canonicalization may itself carry a transform ref
+                    _check_transform_ref(base.transform, f"canonicalizations['{cref}'].transform")
+
+            # 2) inline canonicalization and override may each carry a transform ref
+            _check_canon_def(getattr(spec, "canonicalization", None), f"{where} '{getattr(spec, 'key', '?')}'")
+            _check_canon_def(
+                getattr(spec, "canonicalization_override", None), f"{where} '{getattr(spec, 'key', '?')}'.override"
+            )
+
+        # --- check canonicalization definitions themselves -------------------
+        for cname, cdef in self.canonicalizations.items():
+            _check_transform_ref(cdef.transform, f"canonicalizations['{cname}'].transform")
+
+        # --- check resources / assets / targets ------------------------------
+        for r in self.resources:
+            _check_spec_like(r, "resource")
+        for a in self.assets:
+            _check_spec_like(a, "asset")
+        for t in self.targets:
+            _check_spec_like(t, "target")
+
+        for n in self.scene.nodes:
+            _check_transform_ref(getattr(n, "transform", None), f"scene.nodes['{getattr(n, 'id', '?')}'].transform")
+
+        def _check_spec_canon(spec, where: str) -> None:
+            # 1) canonicalization_ref exists (if provided)
+            if spec.canonicalization_ref:
+                if spec.canonicalization_ref not in self.canonicalizations:
+                    errors.append(
+                        f"{where} '{getattr(spec, 'key', '?')}': "
+                        f"canonicalization_ref '{spec.canonicalization_ref}' not found"
+                    )
+
+            # 2) collect all transform_keys that *might* be used for this spec
+            tkeys: List[Tuple[str, Optional[str]]] = []
+
+            # from referenced canonicalization
+            if spec.canonicalization_ref:
+                base = self.canonicalizations.get(spec.canonicalization_ref)
+                if base and base.transform:
+                    tkeys.append((f"canonicalizations[{spec.canonicalization_ref}]", base.transform))
+
+            # from inline canonicalization
+            if spec.canonicalization and spec.canonicalization.transform_key:
+                tkeys.append(("inline canonicalization", spec.canonicalization.transform_key))
+
+            # from override
+            if spec.canonicalization_override and spec.canonicalization_override.transform_key:
+                tkeys.append(("canonicalization_override", spec.canonicalization_override.transform_key))
+
+            # 3) each transform_key must exist in transforms
+            for origin, tk in tkeys:
+                if tk and tk not in self.transforms:
+                    errors.append(
+                        f"{where} '{getattr(spec, 'key', '?')}': {origin} transform_key '{tk}' not found in transforms"
+                    )
+
+        # --- check all spec containers ---
+        for r in self.resources:
+            _check_spec_canon(r, "resource")
+
+        for a in self.assets:
+            _check_spec_canon(a, "asset")
+
+        for t in self.targets:
+            _check_spec_canon(t, "target")
+
+        # --- optional: sanity checks on canonicalization defs themselves ---
+        for cname, cdef in self.canonicalizations.items():
+            # if applied=False and source_space == FILE_NATIVE, a transform_key is required
+            if (cdef.source_space == "FILE_NATIVE") and not cdef.transform:
+                errors.append(
+                    f"canonicalizations[{cname}]: source_space=FILE_NATIVE without transform_key; "
+                    "provide a transform_key or ensure the loader normalizes to LPS."
+                )
+            # transform_key (if present) must exist
+            if cdef.transform and cdef.transform not in self.transforms:
+                errors.append(f"canonicalizations[{cname}]: transform_key '{cdef.transform}' not found in transforms")
+
+        if errors:
+            raise ValueError("Config cross-reference errors:\n  - " + "\n  - ".join(errors))
+        return self
 
 
 @runtime_checkable
@@ -252,7 +796,7 @@ class SupportsRigidTransform(Protocol[RawT_co]):
     def transformed(self, R: NDArray[np.float64], t: NDArray[np.float64]) -> RawT_co: ...
 
 
-W = TypeVar("W", bound=SupportsRigidTransform[RawT_co])
+W = TypeVar("W", bound=SupportsRigidTransform[Any])
 
 
 @dataclass(frozen=True)
@@ -262,11 +806,11 @@ class AffineTransform:
     inverted: bool = False
 
     @classmethod
-    def identity(cls) -> "AffineTransform":
+    def identity(cls) -> AffineTransform:
         return cls()
 
     @classmethod
-    def from_sitk_path(cls, path: Path, inverted=False) -> "AffineTransform":
+    def from_sitk_path(cls, path: Path, inverted=False) -> AffineTransform:
         R, t, _ = load_sitk_transform(str(path))
         return cls(rotation=R, translation=t, inverted=inverted)
 
@@ -397,22 +941,6 @@ TransformedMesh: TypeAlias = Transformed[MeshTransformable, trimesh.Trimesh]
 TransformedPoints: TypeAlias = Transformed[PointsTransformable, FloatNx3]
 
 
-def _trimesh_from_sitk_mask(mask: sitk.Image) -> trimesh.Trimesh:
-    """Convert a SimpleITK mask image to a trimesh."""
-    structure_mesh = mask_to_trimesh(mask)
-    trimesh.repair.fix_normals(structure_mesh)
-    trimesh.repair.fix_inversion(structure_mesh)
-    return structure_mesh
-
-
-def _load_trimesh_lps(path: Path, src_coordinate_system: str = "ASR") -> trimesh.Trimesh:
-    """Load a trimesh from a SimpleITK image file."""
-    mesh = trimesh.load(str(path))
-    vertices_lps = convert_coordinate_system(mesh.vertices, src_coordinate_system, "LPS")
-    mesh.vertices = vertices_lps
-    return mesh
-
-
 def _get_colormap_colors(N, colormap_name="viridis"):
     """
     Generate N colors evenly spaced across the given colormap.
@@ -428,119 +956,122 @@ def _get_colormap_colors(N, colormap_name="viridis"):
     return [cmap(i) for i in range(N)]
 
 
-def _chem_shift_t_from_path(brain_image_path):
-    brain_image = sitk.ReadImage(str(brain_image_path))
-    chem_shift_pt_R, chem_shift_pt_t = chemical_shift_transform(compute_chemical_shift(brain_image, ppm=3.7))
-    return chem_shift_pt_R, chem_shift_pt_t
-
-
-def _process_implant_segmentation(implant_seg_vol_path):
-    implant_seg_vol = sitk.ReadImage(str(implant_seg_vol_path))
-    implant_targets_by_hole = make_hole_seg_dict(implant_seg_vol, fun=lambda x: np.mean(x, axis=0))
-    implant_names = list(implant_targets_by_hole.keys())
-    implant_targets = np.vstack(list(implant_targets_by_hole.values()))
-    return implant_names, implant_targets
-
 GeometryOut = Union[
-    trimesh.Trimesh,             # surface mesh
-    NDArray[np.float64],         # (N,3) points
+    trimesh.Trimesh,  # surface mesh
+    NDArray[np.float64],  # (N,3) points
 ]
 
 # ---- Registry core --------------------------------------------------------
-_LOADER_REGISTRY: Dict[str, Callable[..., GeometryOut]] = {}
+_LOADER_REGISTRY: dict[str, Callable[..., GeometryOut]] = {}
 
-def register_loader(name: Optional[str] = None):
+
+def register_loader_fn(fn: Callable[..., GeometryOut], name: Optional[str] = None):
+    key = name or fn.__name__
+    if key in _LOADER_REGISTRY:
+        raise KeyError(f"Loader '{key}' already registered")
+    _LOADER_REGISTRY[key] = fn
+    return fn
+
+
+def register_loader(arg: str | Callable[..., GeometryOut] | None = None):
     """Decorator to register a loader function by name."""
+
     def _wrap(fn: Callable[..., GeometryOut]):
-        key = name or fn.__name__
-        if key in _LOADER_REGISTRY:
-            raise KeyError(f"Loader '{key}' already registered")
-        _LOADER_REGISTRY[key] = fn
-        return fn
-    return _wrap
+        name = arg.__name__ if callable(arg) else arg
+        return register_loader_fn(fn, name)
+
+    if callable(arg):
+        return _wrap(arg)
+    else:
+        return _wrap
+
 
 def load_geometry(src: Union[str, Path], loader: str, **kwargs) -> GeometryOut:
     """Dispatch to a named loader. kwargs are passed to the loader."""
     fn = _LOADER_REGISTRY.get(loader)
     if fn is None:
-        raise KeyError(
-            f"Unknown loader '{loader}'. Known: {', '.join(sorted(_LOADER_REGISTRY)) or '(none)'}"
-        )
+        raise KeyError(f"Unknown loader '{loader}'. Known: {', '.join(sorted(_LOADER_REGISTRY)) or '(none)'}")
     return fn(Path(src), **kwargs)
 
+
+@register_loader
+def trimesh_from_sitk_mask(mask: sitk.Image) -> trimesh.Trimesh:
+    """Convert a SimpleITK mask image to a trimesh."""
+    structure_mesh = mask_to_trimesh(mask)
+    trimesh.repair.fix_normals(structure_mesh)
+    trimesh.repair.fix_inversion(structure_mesh)
+    return structure_mesh
+
+
+@register_loader
+def load_trimesh_lps(path: Path, src_coordinate_system: str = "ASR") -> trimesh.Trimesh:
+    """Load a trimesh from a SimpleITK image file."""
+    mesh = trimesh.load(str(path))
+    vertices_lps = convert_coordinate_system(mesh.vertices, src_coordinate_system, "LPS")
+    mesh.vertices = vertices_lps
+    return mesh
+
+
 SourceGeo = Union[trimesh.Trimesh, NDArray[np.float64]]
-ReduceOut  = NDArray[np.float64]  # usually (3,) single point; could be (N,3)
+ReduceOut = NDArray[np.float64]  # usually (3,) single point; could be (N,3)
 
-_REDUCER_REGISTRY: Dict[str, Callable[..., ReduceOut]] = {}
+_REDUCER_REGISTRY: dict[str, Callable[..., ReduceOut]] = {}
 
-def register_reducer(name: Optional[str] = None):
+
+def register_reducer_fn(fn: Callable[..., ReduceOut], name: Optional[str] = None):
+    key = name or fn.__name__
+    if key in _REDUCER_REGISTRY:
+        raise KeyError(f"Reducer '{key}' already registered")
+    _REDUCER_REGISTRY[key] = fn
+    return fn
+
+
+def register_reducer(arg: str | Callable[..., ReduceOut] | None = None):
     def _wrap(fn: Callable[..., ReduceOut]):
-        key = name or fn.__name__
-        if key in _REDUCER_REGISTRY:
-            raise KeyError(f"Reducer '{name}' already registered")
-        _REDUCER_REGISTRY[key] = fn
-        return fn
-    return _wrap
+        name = arg.__name__ if callable(arg) else arg
+        return register_reducer_fn(fn, name)
+
+    if callable(arg):
+        return _wrap(arg)
+    else:
+        return _wrap
+
 
 def reduce_target(source: SourceGeo, reducer: str, **kwargs) -> ReduceOut:
     fn = _REDUCER_REGISTRY.get(reducer)
     if fn is None:
-        raise KeyError(
-            f"Unknown reducer '{reducer}'. Known: {', '.join(sorted(_REDUCER_REGISTRY)) or '(none)'}"
-        )
+        raise KeyError(f"Unknown reducer '{reducer}'. Known: {', '.join(sorted(_REDUCER_REGISTRY)) or '(none)'}")
     return fn(source, **kwargs)
 
-class Capability(IntFlag):
-    RENDERABLE = auto()
-    MOVABLE = auto()
-    COLLIDABLE = auto()
-    SELECTABLE = auto()
-    DEFORMABLE = auto()  # future-proofing (skinning, morphs)
-    SAVABLE = auto()  # include in plan exports
-
-class Role(str, Enum):
-    GEOMETRY = "geometry"  # meshes/lines/points used as scene geometry
-    TARGET   = "target"    # logical target(s), typically non-collidable landmarks
-    LANDMARK = "landmark"  # fiducials, reference points, etc.
 
 @dataclass(frozen=True)
-class CanonicalizationInfo:
-    source_space: Literal["ASR","RAS","LPS","FILE_NATIVE"]
-    unit_scale: float                   # e.g. 0.001 if µm → mm
-    transform_file_to_canonical: TransformChain
-    applied: bool                       # baked into vertices?
-    version: str = "canon-v1"           # bump if your rules change
-    fingerprint: str = ""               # hash(source_path, mtime, fields above)
+class CanonicalizationRuntime:
+    source_space: Literal["ASR", "RAS", "FILE_NATIVE"]
+    scale_to_mm: float  # e.g. 0.001 if µm → mm
+    transform_file_to_canonical: AffineTransform
 
-Float3 = np.ndarray  # shape (3,)
-FloatAABB = np.ndarray  # shape (2,3)
 
 @dataclass(frozen=True)
 class BaseSpec:
     # WHAT it is
-    key: str                                    # unique id, e.g. "probe:2.1", "structure:PL", "target:hole:1"
+    key: str  # unique id, e.g. "probe:2.1", "structure:PL", "target:hole:1"
     kind: Literal["mesh", "points", "lines"]
     role: Role = Role.GEOMETRY
-    default_material: "Material" = field(default_factory=lambda: Material("default"))
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    tags: set[str] = field(default_factory=set) # free-form (scene/UI grouping)
-    canonicalization: CanonicalizationInfo = field(
-        default_factory=lambda: CanonicalizationInfo(
-            source_space="FILE_NATIVE", unit_scale=1.0,
-            transform_file_to_canonical="TransformChain.identity()",  # type: ignore
-            applied=True)
-    )
+    default_material: Material = field(default_factory=lambda: Material("default"))
+    metadata: dict[str, Any] = field(default_factory=dict)
+    tags: set[str] = field(default_factory=set)  # free-form (scene/UI grouping)
 
     # HOW it behaves (capabilities & collision policy)
     caps: Capability = Capability.RENDERABLE
-    collidable_group: int = 0                   # label-compiled group bit (0 = none)
-    collidable_mask: int = 0                    # set of groups it can collide with (bitmask)
+    collidable_group: int = 0  # label-compiled group bit (0 = none)
+    collidable_mask: int = 0  # set of groups it can collide with (bitmask)
 
     # Optional quick UI/layout hints (applies to meshes/points; ignored otherwise)
-    pivot_LPS: Optional[Float3] = None          # rotation center in canonical local asset space
-    bbox_hint: Optional[FloatAABB] = None       # AABB (2×3) or sphere radius (use metadata if preferred)
+    pivot_LPS: Optional[Float3] = None  # rotation center in canonical local asset space
+    bbox_hint: Optional[FloatAABB] = None  # AABB (2×3) or sphere radius (use metadata if preferred)
 
     # NOTE: BaseSpec does NOT carry concrete geometry; subclasses do.
+
 
 # ---------------------------------------------------------------------------
 # AssetSpec: concrete geometry (catalog items)
@@ -549,7 +1080,7 @@ class BaseSpec:
 class AssetSpec(BaseSpec):
     # SOURCE (how to load the asset)
     source_path: Optional[Path] = None
-    loader: Optional[str] = None                # name of a registered loader (e.g. "trimesh", "sitk_mask_to_trimesh")
+    loader: Optional[str] = None  # name of a registered loader (e.g. "trimesh", "trimesh_from_sitk_mask")
 
     # CANONICAL GEOMETRY (post-load, guaranteed in canonical LPS mm when applied=True)
     mesh: Optional["MeshTransformable"] = None
@@ -567,6 +1098,7 @@ class AssetSpec(BaseSpec):
             object.__setattr__(self, "collidable_mask", 0)
             object.__setattr__(self, "collidable_group", 0)
 
+
 # ---------------------------------------------------------------------------
 # TargetSpec: logical targets (derived or explicit points)
 # ---------------------------------------------------------------------------
@@ -581,222 +1113,229 @@ class TargetSpec(BaseSpec):
     # - If 'source_path' + 'loader' given → explicit points (like AssetSpec points)
     # - If 'source_key' + 'reducer' given → derive from another AssetSpec already in catalog
     source_path: Optional[Path] = None
-    loader: Optional[str] = None                # e.g. "numpy_points"
-    source_key: Optional[str] = None            # e.g. "structure:PL"
-    reducer: Optional[str] = None               # registered reducer name
-    reducer_kwargs: Dict[str, Any] = field(default_factory=dict)
+    loader: Optional[str] = None  # e.g. "numpy_points"
+    source_key: Optional[str] = None  # e.g. "structure:PL"
+    reducer: Optional[str] = None  # registered reducer name
+    reducer_kwargs: dict[str, Any] = field(default_factory=dict)
 
     # DERIVED/LOADED canonical points
     points: Optional["PointsTransformable"] = None
 
     # Hints useful for planning/visualization (targets are often landmarks)
-    approach_vector: Optional[Float3] = None    # preferred insertion direction (LPS)
-    uncertainty_mm: Optional[float] = None      # radius for UI (confidence, snap tolerance, etc.)
+    approach_vector: Optional[Float3] = None  # preferred insertion direction (LPS)
+    uncertainty_mm: Optional[float] = None  # radius for UI (confidence, snap tolerance, etc.)
 
     def __post_init__(self):
         # Enforce typical non-collidable defaults for targets
         if self.caps & Capability.COLLIDABLE:
             raise ValueError(f"{self.key}: targets should not be collidable by default")
         # Require either explicit points (source_path+loader) or derived (source_key+reducer)
-        explicit = (self.source_path is not None and self.loader is not None)
-        derived  = (self.source_key is not None and self.reducer is not None)
+        explicit = self.source_path is not None and self.loader is not None
+        derived = self.source_key is not None and self.reducer is not None
         if not explicit and not derived and self.points is None:
             raise ValueError(f"{self.key}: must provide explicit points or a (source_key, reducer)")
 
-# TODO: change this into asset loader
-def build_asset_catalog(cfg) -> dict:
-    catalog = {}
-    # load meshes/points
-    for a in cfg["assets"]:
-        if a["kind"] == "mesh":
-            geo = load_geometry(a["src"], loader=a["loader"])
-        elif a["kind"] == "points" and "src" in a:
-            geo = load_geometry(a["src"], loader=a.get("loader", "numpy_points"))
-        elif a["kind"] == "points" and "source" in a:
-            source_geo = catalog[a["source"]]["geo"]  # use previously loaded asset
-            p = reduce_target(source_geo, reducer=a.get("reducer", "explicit"))
-            geo = p[None, :] if p.ndim == 1 else p
-        else:
-            raise ValueError(f"Unsupported asset spec: {a}")
 
-        catalog[a["key"]] = {"kind": a["kind"], "geo": geo, **{k:v for k,v in a.items() if k not in ("src","loader")}}
-    return catalog
+@dataclass(frozen=True)
+class ChemShiftContext:
+    enabled: bool
+    magnet_MHz: float
+    default_ppm: float = 3.7
+    apply_by_role: set[Role] = field(default_factory=set)
+    # transforms to apply to geometry in image/LPS space
+    points_transform: AffineTransform = AffineTransform.identity()
+
+
+def build_chemshift_context(cfg: ConfigModel) -> ChemShiftContext:
+    im = cfg.imaging
+    if im is None:
+        return ChemShiftContext(False, 0.0, 0.0)
+    # Build correction using your existing aind_mri_utils helpers.
+    # If your `compute_chemical_shift` accepts only ppm, scale ppm if you want
+    # frequency-awareness; otherwise pass ppm through (common in practice).
+    if im.image_path is not None:
+        brain_image = sitk.ReadImage(str(im.image_path))
+        chem_shift_pt_R, chem_shift_pt_t = chemical_shift_transform(
+            compute_chemical_shift(brain_image, ppm=im.chem_shift_ppm_default)
+        )
+        chem_shift_pt_transform = AffineTransform(chem_shift_pt_R, chem_shift_pt_t)
+    else:
+        chem_shift_pt_transform = AffineTransform.identity()
+    return ChemShiftContext(
+        enabled=True,
+        magnet_MHz=im.magnet_frequency_MHz,
+        default_ppm=im.chem_shift_ppm_default,
+        apply_by_role=set(im.chem_shift_apply_by_role),
+        points_transform=chem_shift_pt_transform,
+    )
+
+
+def _should_apply_chem(asset_model: BaseSpecModel, chem: ChemShiftContext) -> bool:
+    if not chem.enabled:
+        return False
+    mode = asset_model.chem_shift  # "on"|"off"|"auto"
+    if mode == "on":
+        return True
+    if mode == "off":
+        return False
+    # "auto": follow role defaults
+    return asset_model.role in chem.apply_by_role
+
+
+@dataclass(frozen=True, slots=True)
+class AssetCatalog:
+    assets: dict[str, AssetSpec]  # asset catalog
+    targets: dict[str, TargetSpec] = field(default_factory=dict)
+
+
+# Plan for probe location
+@dataclass(slots=True)
+class ProbePlan:
+    probe_type: str
+    arc_id: Optional[str]  # which arc this probe belongs to (None = not bound to any arc)
+    # angle sources / bindings
+    bind_ap_to_arc: bool = True  # if True and not calibrated → AP comes from arc
+    # per-probe local angles (always present so you can edit them; used when
+    # not bound / not calibrated)
+    ap_local: float = 0.0  # deg
+    ml_local: float = 0.0  # deg
+    spin: float = 0.0  # deg
+    # targeting
+    past_target_mm: float = 0.0
+    offsets_RA: Tuple[float, float] = (0.0, 0.0)
+    target_key: Optional[str] = None  # preferred: reference into asset catalog
+    target_point_RAS: Optional[Tuple[float, float, float]] = None  # ad-hoc fallback
+    # calibration policy
+    calibrated: bool = False  # if True and calibration exists → AP/ML come from calibration
+
+
+@dataclass(frozen=True, slots=True)
+class JointRange:
+    lo: float
+    hi: float
+
+    def clamp(self, v: float) -> float:
+        return float(min(max(v, self.lo), self.hi))
+
+
+@dataclass(frozen=True, slots=True)
+class PoseLimits:
+    # angular limits (deg)
+    ap_deg: JointRange = field(default_factory=lambda: JointRange(-60.0, 60.0))
+    ml_deg: JointRange = field(default_factory=lambda: JointRange(-60.0, 60.0))
+    spin_deg: JointRange = field(default_factory=lambda: JointRange(-180.0, 180.0))
+    # translational work envelope (mm); set to None if unbounded
+    x_mm: Optional[JointRange] = None
+    y_mm: Optional[JointRange] = None
+    z_mm: Optional[JointRange] = None
+
+    def clamp_angles(self, ap: float, ml: float, spin: float) -> Tuple[float, float, float]:
+        return (
+            self.ap_deg.clamp(ap),
+            self.ml_deg.clamp(ml),
+            self.spin_deg.clamp(spin),
+        )
+
+    def clamp_xyz(self, tip_lps: np.ndarray) -> np.ndarray:
+        t = np.asarray(tip_lps, dtype=np.float64).copy()
+        if self.x_mm:
+            t[0] = self.x_mm.clamp(t[0])
+        if self.y_mm:
+            t[1] = self.y_mm.clamp(t[1])
+        if self.z_mm:
+            t[2] = self.z_mm.clamp(t[2])
+        return t
+
+
+# --- Kinematics model (no knowledge of probes) ------------------------------
+
 
 @dataclass(slots=True)
-class NodeInstance:
-    id: str  # unique per-node, e.g., "probe:PL"
-    asset_key: str  # foreign key to AssetSpec.key, e.g., "probe:2.1"
-    transform: TransformChain = field(default_factory=lambda: TransformChain.new([AffineTransform.identity()]))
-    tags: Set[str] = field(default_factory=set)
-    material_override: Optional[Material] = None
-    enabled: bool = True
-
-    # Per-instance constraints/locks (e.g., calibration)
-    locked_axes: Set[str] = field(default_factory=set)  # {"ap_tilt", "ml_tilt", "spin", "x", "y", "z"}
-    extras: Dict[str, Any] = field(default_factory=dict)  # e.g., calibration_rt
-
-
-@dataclass(frozen=True, slots=True)
-class AppAssets:
-    specs: Dict[str, AssetSpec]  # asset catalog
-    # Keep your current fields too (brain_mesh, probe_models...), or build specs from them
-    # Example: specs["probe:2.1"].mesh holds the MeshTransformable
-    calibrations: Optional[Dict[str, AffineTransform]] = None
-    targets: Dict[str, TransformedPoints] = field(default_factory=dict)  # you added this
-
-    @classmethod
-    def from_app_config(cls, app_config: AppConfig) -> "AppAssets":
-        brain_image_transform = AffineTransform.from_sitk_path(app_config.headframe_transform_file)
-        chem_shift_pt_R, chem_shift_pt_t = _chem_shift_t_from_path(app_config.image_path)
-        chem_shift_image_transform = AffineTransform(
-            rotation=chem_shift_pt_R, translation=chem_shift_pt_t, inverted=True
-        )
-        brain_chem_image_transform = TransformChain([chem_shift_image_transform, brain_image_transform])
-        # This is the transform to use on points in the brain, with chemical shift
-        brain_chem_pt_transform = brain_chem_image_transform.invert()
-
-        specs: Dict[str, AssetSpec] = {}
-        brain_mesh = MeshTransformable(_trimesh_from_sitk_mask(sitk.ReadImage(str(app_config.brain_mask_path))))
-        specs["brain"] = AssetSpec(
-            key="brain", kind="mesh", mesh=brain_mesh,  # base mesh
-            default_material=Material("brain", "#EFC3CA", opacity=0.1),
-            caps=Capability.RENDERABLE,
-        )
-        for name, path in app_config.structure_files.items():
-            structure_mesh = MeshTransformable(_trimesh_from_sitk_mask(sitk.ReadImage(str(path))))
-            structure_target = np.array(structure_mesh.raw.center_mass)
-
-
-
-@dataclass(frozen=True, slots=True)
-class AppAssets:
+class Kinematics:
     """
-    These are the assets for the app, including the brain mask, brain
-    structures, implant segmentation, and probe models.
-
-    This should be the loaded data for objects that do not change location during planning, and
-    should be used as the basis for all transformations.
-
-    Probe models are loaded here but not transformed into insertion position
+    Rig-wide kinematics parameters.
+    - arc_angles: shared AP tilt per arc id (deg)
+    - limits: mechanical/operational joint limits
+    - coupled_axes: which DOFs are shared by all probes on the same arc
+      (by convention these names match your ProbePose fields: 'ap_deg', 'ml_deg', 'spin_deg', 'x_mm', 'y_mm', 'z_mm')
     """
 
-    brain_mesh: TransformedMesh
-    brain_structures: Dict[str, TransformedMesh]  # structure name → mesh
-    implant_segmentation: TransformedPoints
-    probe_models: Dict[str, MeshTransformable]
-    hole_models: Dict[int, TransformedMesh]
-    implant_mesh: TransformedMesh
-    well_mesh: MeshTransformable
-    cone_mesh: MeshTransformable
-    headframe_mesh: MeshTransformable
-    targets: Dict[str, TransformedPoints]
-    calibrations: Optional[Dict[str, AffineTransform]]  # structure → AffineTransform
+    arc_angles: dict[str, float] = field(default_factory=dict)  # e.g., {"a": 12.0, "b": -8.0}
+    limits: PoseLimits = field(default_factory=PoseLimits)
+    coupled_axes: Set[str] = field(default_factory=lambda: {"ap_deg"})  # today: AP tilt is arc-coupled
 
-    @classmethod
-    def from_app_config(cls, app_config: AppConfig) -> "AppAssets":
-        # Find the brain transform for points
-        brain_image_transform = AffineTransform.from_sitk_path(app_config.headframe_transform_file)
-        chem_shift_pt_R, chem_shift_pt_t = _chem_shift_t_from_path(app_config.image_path)
-        chem_shift_image_transform = AffineTransform(
-            rotation=chem_shift_pt_R, translation=chem_shift_pt_t, inverted=True
-        )
-        brain_chem_image_transform = TransformChain([chem_shift_image_transform, brain_image_transform])
-        # This is the transform to use on points in the brain, with chemical shift
-        brain_chem_pt_transform = brain_chem_image_transform.invert()
+    # convenience helpers
+    def get_arc(self, arc_id: str) -> float:
+        return float(self.arc_angles[arc_id])
 
-        # Downsample the brain mask to 1000 points for visualization
-        brain_mesh = MeshTransformable(_trimesh_from_sitk_mask(sitk.ReadImage(str(app_config.brain_mask_path))))
-        brain_mesh_txd = TransformedMesh(brain_mesh, brain_chem_pt_transform)
+    def set_arc(self, arc_id: str, ap_deg: float) -> float:
+        """Clamp and store AP for an arc; return the value actually stored."""
+        clamped = self.limits.ap_deg.clamp(ap_deg)
+        self.arc_angles[arc_id] = clamped
+        return clamped
 
-        # Targets
-        targets = {}
+    def clamp_angles(self, ap: float, ml: float, spin: float) -> Tuple[float, float, float]:
+        return self.limits.clamp_angles(ap, ml, spin)
 
-        # Load brain structures
-        brain_structures = {}
-        for name, path in app_config.structure_files.items():
-            structure_mesh = MeshTransformable(_trimesh_from_sitk_mask(sitk.ReadImage(str(path))))
-            structure_target = np.array(structure_mesh.raw.center_mass)
-            brain_structures[name] = TransformedMesh(structure_mesh, brain_chem_pt_transform)
-            targets[f"structure:{name}"] = TransformedPoints(
-                as_transformable(structure_target), brain_chem_pt_transform
-            )
+    def clamp_xyz(self, tip_lps: np.ndarray) -> np.ndarray:
+        return self.limits.clamp_xyz(tip_lps)
 
-        # Load implant segmentation
-        # No chemical shift: implant visible with same material as headframe
-        _, implant_targets = _process_implant_segmentation(app_config.implant_annotation_file)
-        brain_pt_transform = brain_image_transform.invert()
-        implant_seg_txd = TransformedPoints(as_transformable(implant_targets), TransformChain([brain_pt_transform]))
-
-        # Load hole models
-        # Rotate the model to the original image: inverted because it works on points
-        implant_to_image_pt_transform = AffineTransform.from_sitk_path(
-            app_config.implant_fit_transform_file, inverted=True
-        )
-        # Then apply the brain transform without chemical shift
-        implant_pt_transform = TransformChain([implant_to_image_pt_transform, brain_pt_transform])
-        hole_models = {}
-        for hole_num, hole_path in app_config.hole_model_files.items():
-            hole_mesh = MeshTransformable(_load_trimesh_lps(hole_path))
-            implant_target = np.array(hole_mesh.raw.centroid)
-            hole_models[hole_num] = TransformedMesh(hole_mesh, implant_pt_transform)
-            targets[f"hole:{hole_num}"] = TransformedPoints(as_transformable(implant_target), implant_pt_transform)
-        # Apply to entire implant mesh
-        implant_mesh = MeshTransformable(_load_trimesh_lps(app_config.implant_file))
-        implant_mesh = TransformedMesh(implant_mesh, implant_pt_transform)
-
-        # Load probe models
-        probe_models = {}
-        for probe_name, probe_path in app_config.probe_model_files.items():
-            probe_trimesh = load_newscale_trimesh(probe_path)
-            probe_models[probe_name] = MeshTransformable(probe_trimesh)
-
-        # Other models
-        well_mesh = MeshTransformable(_load_trimesh_lps(app_config.well_file))
-        cone_mesh = MeshTransformable(_load_trimesh_lps(app_config.cone_file))
-        headframe_mesh = MeshTransformable(_load_trimesh_lps(app_config.headframe_file))
-
-        # Load calibrations
-        if app_config.calibration_info is None:
-            calibrations = None
-        else:
-            if len(app_config.calibration_info.calibration_files) == 0:
-                cal_by_probe_combined, _ = fit_rotation_params_from_parallax(
-                    app_config.calibration_info.parallax_calibration_dirs,
-                    app_config.reticle_offset,
-                    app_config.reticle_rotation,
-                )
-            else:
-                cal_by_probe_combined, _, _ = combine_parallax_and_manual_calibrations(
-                    manual_calibration_files=app_config.calibration_info.calibration_files,
-                    parallax_directories=app_config.calibration_info.parallax_calibration_dirs,
-                )
-            calibrations = {}
-            for structure, probe_id in app_config.calibration_info.probe_for_target.items():
-                if probe_id in cal_by_probe_combined:
-                    R, t = cal_by_probe_combined[probe_id]
-                    calibrations[structure] = AffineTransform(R, t)
-
-        # Return the constructed AppAssets instance
-        return cls(
-            brain_mesh=brain_mesh_txd,
-            brain_structures=brain_structures,
-            implant_segmentation=implant_seg_txd,
-            probe_models=probe_models,
-            hole_models=hole_models,
-            implant_mesh=implant_mesh,
-            well_mesh=well_mesh,
-            cone_mesh=cone_mesh,
-            headframe_mesh=headframe_mesh,
-            calibrations=calibrations,
-        )
+    def is_axis_coupled(self, axis_name: str) -> bool:
+        """UI can call this to gray controls; mechanics layer just declares policy."""
+        return axis_name in self.coupled_axes
 
 
-@dataclass(frozen=True, slots=True)
-class AppData:
-    probe_config: ProbeConfig
-    assets: AppAssets
+@dataclass(slots=True)
+class PlanningState:
+    kinematics: Kinematics
+    probes: dict[str, ProbePlan]
+    calibrations: dict[str, AffineTransform] = field(default_factory=dict)  # probe_name → calibration transform
+    target_index: dict[str, Float3] = field(default_factory=dict)
 
 
+def _resolve_target_LPS_from_plan(
+    plan: ProbePlan,
+    target_index: dict[str, np.ndarray],
+    assets_fallback: Optional[dict[str, TransformedPoints]] = None,
+) -> np.ndarray:
+    """Return a single (3,) LPS point for the plan's target."""
+    # Inline ad-hoc target
+    if plan.target_point_RAS is not None:
+        ras = np.asarray(plan.target_point_RAS, dtype=float)
+        return convert_coordinate_system(ras, "RAS", "LPS")
+
+    # Catalog target by key
+    if plan.target_key:
+        pts = target_index.get(plan.target_key)
+        if pts is None and assets_fallback is not None:
+            tp = assets_fallback.get(plan.target_key)
+            if tp is not None:
+                pts = tp.raw  # already in LPS if your assets pipeline canonicalized it
+        if pts is None:
+            warn(f"Missing target for key: {plan.target_key!r}; using origin.")
+            return np.zeros(3, dtype=float)
+        return pts if pts.ndim == 1 else pts.mean(axis=0)
+
+    warn("ProbePlan has neither target_key nor target_point_RAS; using origin.")
+    return np.zeros(3, dtype=float)
+
+
+def _resolved_angles(name: str, ps: PlanningState) -> tuple[float, float, float]:
+    plan = ps.probes[name]
+    cal = ps.calibrations.get(name)
+
+    if plan.calibrated and cal is not None:
+        ap, ml = find_probe_angle(cal.rotation)  # locked to calibration
+    else:
+        # AP: from arc if bound, else local; ML: always per-probe local unless you add another binding flag
+        ap = ps.kinematics.get_arc(plan.arc_id) if (plan.arc_id and plan.bind_ap_to_arc) else plan.ap_local
+        ml = plan.ml_local
+    # clamp to rig limits
+    ap, ml, spin = ps.kinematics.clamp_angles(ap, ml, plan.spin)
+    return ap, ml, spin
+
+
+# Run time
 @dataclass(slots=True)
 class ProbePose:
     # rig convention: positive is mouse pitch down (CW looking into right ML
@@ -820,101 +1359,90 @@ class ProbePose:
         return TransformChain([self.transform()])
 
     @classmethod
-    def from_app_data(
-        cls, data: AppData, probe_name: str, calibration: Optional[AffineTransform] = None
-    ) -> "ProbePose":
-        # AP ML angles and spin
-        probe_config = data.probe_config
-        if calibration:
-            ap, ml = find_probe_angle(calibration.rotation)
-            spin = probe_config.probe_info[probe_name].spin
-        else:
-            arc = probe_config.probe_info[probe_name].arc
-            ap = probe_config.arcs[arc]
-            ml = probe_config.probe_info[probe_name].slider_ml
-            spin = probe_config.probe_info[probe_name].spin
-        # Tip location
-        target_info = probe_config.target_info_by_probe[probe_name]
-        target_name = target_info.target_name
-        if target_name:
-            assets = data.assets
-            structure_target_id = f"structure:{target_name}"
-            if target_name.startswith("hole-"):
-                # Handle hole targets
-                hole_num = int(target_name.split("-")[-1])
-                hole_target_id = f"hole:{hole_num}"
-                if hole_target_id in assets.targets:
-                    target = assets.targets[hole_target_id].raw
-                else:
-                    warn(f"Missing hole model for: {target_name}")
-                    target = np.zeros(3)
-            elif structure_target_id in assets.targets:
-                # Handle brain structure targets
-                target = assets.targets[structure_target_id].raw
-            else:
-                warn(f"Missing target for: {target_name}")
-                target = np.zeros(3)
-            trim = np.zeros(3)
-            trim[:2] = target_info.offsets_RA
-            trim = convert_coordinate_system(trim, "RAS", "LPS")
-            adjusted_target = target + trim
-        elif target_info.target_coordinates_RAS:
-            trim = np.zeros(3)
-            trim[:2] = target_info.offsets_RA
-            adjust_target_ras = target_info.target_coordinates_RAS + trim
-            adjusted_target = convert_coordinate_system(np.array(adjust_target_ras), "RAS", "LPS")
-        else:
-            warn(f"No valid target information for probe: {probe_name}")
-            adjusted_target = np.zeros(3)
-        # Calculate insertion vector
-        R_probe_mesh = arc_angles_to_affine(ap, ml, spin)
-        insertion_vector = R_probe_mesh @ np.array([0.0, 0.0, -target_info.depth])
-        tip_location = adjusted_target + insertion_vector
-        return cls(ap=ap, ml=ml, spin=spin, tip=tip_location)
+    def from_planning_state(
+        cls,
+        ps: PlanningState,
+        probe_name: str,
+        *,
+        assets_targets_fallback: Optional[dict[str, TransformedPoints]] = None,
+    ) -> ProbePose:
+        """
+        Resolve a live pose from PlanningState (no mutations).
+        - AP comes from calibration if plan.calibrated and matrix is present,
+        else from arc if bound, else local.
+        - ML comes from calibration if present/allowed, else local.
+        - Spin is always the per-probe plan spin.
+        - Target is taken from planning.target_index (or assets fallback) +
+        offsets_RA.
+        """
+        plan = ps.probes[probe_name]
+        cal = ps.calibrations.get(probe_name)
+
+        # --- angles (AP/ML) ---
+        ap_deg, ml_deg, spin_deg = _resolved_angles(probe_name, ps)
+
+        # --- target + offsets (RAS→LPS) ---
+        tgt_LPS = _resolve_target_LPS_from_plan(plan, ps.target_index, assets_fallback=assets_targets_fallback)
+        off_RAS = np.array([plan.offsets_RA[0], plan.offsets_RA[1], 0.0], dtype=np.float64)
+        off_LPS = convert_coordinate_system(off_RAS, "RAS", "LPS")
+        adjusted_target = tgt_LPS + off_LPS
+
+        # --- tip from depth and orientation ---
+        R_probe = arc_angles_to_affine(ap_deg, ml_deg, spin_deg)
+        insertion_vec = R_probe @ np.array([0.0, 0.0, -float(plan.past_target_mm)], dtype=np.float64)
+        tip = adjusted_target + insertion_vec
+        tip = ps.kinematics.clamp_xyz(tip)
+
+        return cls(ap=ap_deg, ml=ml_deg, spin=spin_deg, tip=tip)
 
 
+# run time
 @dataclass(slots=True)
 class Probe:
     probe_type: str
     pose: ProbePose
-    calibrated: bool = False
-    calibration_transform: Optional[AffineTransform] = None
-
-    @classmethod
-    def from_app_data(cls, data: AppData, probe_name: str, calibration: Optional[AffineTransform] = None) -> "Probe":
-        probe_pose = ProbePose.from_app_data(data, probe_name, calibration=calibration)
-        calibrated = calibration is not None
-        probe_type = data.probe_config.probe_info[probe_name].type
-        return cls(
-            probe_type=probe_type, pose=probe_pose, calibrated=calibrated, calibration_transform=calibration
-        )
 
 
-@dataclass(slots=True)
-class AppGeometry:
-    data: AppData
-    probes: dict[str, Probe]
+# get_pivot_for_asset: asset_key -> local-space pivot (LPS mm) or None
+GetPivotFn = Callable[[str], Optional[np.ndarray]]
 
-    @classmethod
-    def from_app_data(cls, data: AppData, ignore_calibrations: bool | List[str] = False) -> "AppGeometry":
-        # Test if ignore_calibrations is a list
-        calibrated_structures = list(data.assets.calibrations.keys()) if data.assets.calibrations else []
-        if isinstance(ignore_calibrations, list):
-            # Handle the case where a list of structures to ignore is provided
-            calibrations_to_use = list(set(calibrated_structures) - set(ignore_calibrations))
-        elif ignore_calibrations:
-            calibrations_to_use = []
-        else:
-            calibrations_to_use = calibrated_structures
-        probes = {}
-        for probe_name in data.probe_config.target_info_by_probe.keys():
-            if probe_name in calibrations_to_use:
-                maybe_calibration = data.assets.calibrations[probe_name]
-            else:
-                maybe_calibration = None
-            this_probe = Probe.from_app_data(data, probe_name, calibration=maybe_calibration)
-            probes[probe_name] = this_probe
-        return cls(data=data, probes=probes)
+
+@dataclass
+class PoseResolver:
+    planning: PlanningState
+    get_pivot_for_asset: GetPivotFn = lambda _key: None  # default: rotate around asset origin
+
+    # ---- dynamic pose for a probe (no scene knowledge) ----
+    def _probe_chain(self, probe_name: str) -> TransformChain:
+        pose = ProbePose.from_planning_state(self.planning, probe_name)
+        return pose.chain()
+
+    # ---- dynamic transform for a scene node (may be identity) ----
+    def dynamic_chain_for_node(self, node: "NodeInstance") -> TransformChain:
+        probe_name: Optional[str] = node.extras.get("pose_source_probe")
+        if not probe_name:
+            return TransformChain.new([AffineTransform.identity()])
+
+        dyn = self._probe_chain(probe_name)
+
+        # If the asset needs rotation about a local pivot (e.g., tip),
+        # wrap the dynamic pose with +pivot / -pivot translations
+        pivot = self.get_pivot_for_asset(node.asset_key)
+        if pivot is not None:
+            T_p = AffineTransform(rotation=np.eye(3), translation=np.asarray(pivot, float))
+            T_m = AffineTransform(rotation=np.eye(3), translation=-np.asarray(pivot, float))
+            return TransformChain.new([T_p, *dyn.elements, T_m])
+
+        return dyn
+
+    # ---- final world transform = base ∘ dynamic ----
+    def world_chain_for_node(self, node: "NodeInstance") -> TransformChain:
+        base = node.transform
+        dyn = self.dynamic_chain_for_node(node)
+        return TransformChain.new([*base.elements, *dyn.elements])
+
+    def world_rt_for_node(self, node: "NodeInstance") -> tuple[np.ndarray, np.ndarray]:
+        return self.world_chain_for_node(node).composed_transform
 
 
 @dataclass(frozen=True, slots=True)
@@ -924,6 +1452,733 @@ class Material:
     opacity: float = 1.0
     wireframe: bool = False
     visible: bool = True
+
+
+@dataclass(slots=True)
+class NodeInstance:
+    id: str  # unique per-node, e.g., "probe:PL"
+    asset_key: str  # foreign key to AssetSpec.key, e.g., "probe:2.1"
+    transform: TransformChain = field(default_factory=lambda: TransformChain.new([AffineTransform.identity()]))
+    tags: Set[str] = field(default_factory=set)
+    material_override: Optional[Material] = None
+    enabled: bool = True
+
+    # Per-instance constraints/locks (e.g., calibration)
+    locked_axes: Set[str] = field(default_factory=set)  # {"ap_tilt", "ml_tilt", "spin", "x", "y", "z"}
+    extras: dict[str, Any] = field(default_factory=dict)  # e.g., calibration_rt
+
+
+@dataclass(slots=True)
+class Scene:
+    nodes: dict[str, NodeInstance] = field(default_factory=dict)
+
+    def upsert(self, node: NodeInstance):
+        self.nodes[node.id] = node
+
+    def remove(self, node_id: str):
+        self.nodes.pop(node_id, None)
+
+    def by_tag(self, tag: str):
+        return [n for n in self.nodes.values() if tag in n.tags]
+
+
+def _load_calibration_bank(
+    cal_file: CalibrationSourceModel, reticles: dict[str, CalibrationReticleModel]
+) -> dict[str, Tuple[np.ndarray, np.ndarray]]:
+    """
+    Load a calibration file that contains multiple probe entries.
+    Return a dict mapping probe_code (string) -> (R,t).
+    """
+    # --- EXAMPLE STUBS (replace with real parsing) -------------------------
+    if cal_file.directory:
+        if cal_file.reticle is None:
+            raise ValueError("Reticle model is required for directory calibration")
+        reticle = reticles.get(cal_file.reticle)
+        offset = np.array(reticle.offset_RAS, dtype=float)
+        rotation = reticle.rotation_z
+        cal_by_probe = fit_rotation_params_from_parallax(cal_file.directory, offset, rotation)[0]
+    else:
+        cal_by_probe = fit_rotation_params_from_manual_calibration(cal_file.file)[0]
+    return {str(k): v for k, v in cal_by_probe.items()}
+
+
+def _get_calibration_rt(
+    calibrations: CalibrationsModel,
+    reticles: dict[str, CalibrationReticleModel] = {},
+) -> dict[str, "AffineTransform"]:
+    """
+    For each domain probe name, resolve (cal_id → path) then (probe_code → R,t).
+    Cache each file load so it’s read once.
+    """
+    cal_files = calibrations.files
+    probe_to_ref = calibrations.probe_to_ref
+    cache: dict[str, dict[str, Tuple[np.ndarray, np.ndarray]]] = {}
+    out: dict[str, AffineTransform] = {}
+
+    for probe_name, ref in probe_to_ref.items():
+        # load or reuse the bank
+        if ref.cal_id not in cache:
+            cal_file = cal_files[ref.cal_id]
+            bank = _load_calibration_bank(cal_file, reticles)
+            cache[ref.cal_id] = bank
+        else:
+            bank = cache[ref.cal_id]
+
+        code = str(ref.probe_code)
+        if code not in bank:
+            # Clear error message showing available keys
+            avail = ", ".join(sorted(bank.keys())[:8])
+            raise KeyError(
+                f"Calibration probe_code '{code}' not found in cal_id '{ref.cal_id}'. "
+                f"Examples available: {avail}{' …' if len(bank) > 8 else ''}"
+            )
+
+        R, t = bank[code]
+        out[probe_name] = AffineTransform(rotation=np.asarray(R, float), translation=np.asarray(t, float))
+
+    return out
+
+
+def _compile_collision_labels(labels_in_use: Iterable[str]) -> dict[str, int]:
+    """
+    Assign each collision label a bit. Bit 0 is reserved for 'NONE' (unused).
+    """
+    labels = [l for l in dict.fromkeys(labels_in_use) if l]  # unique, drop falsy
+    mapping: dict[str, int] = {}
+    for i, lab in enumerate(labels, start=1):  # start bits at 1
+        mapping[lab] = 1 << i
+    return mapping
+
+
+def _apply_canonicalization_mesh(
+    mesh: trimesh.Trimesh,
+    source_space: str,
+    unit_scale: float,
+) -> trimesh.Trimesh:
+    """
+    Make a shallow copy of mesh in LPS mm.
+    - Apply unit scaling.
+    - Convert coordinate system to LPS.
+    """
+    m = trimesh.Trimesh(vertices=mesh.vertices.copy(), faces=mesh.faces.copy(), process=False)
+    if unit_scale != 1.0:
+        m.vertices *= float(unit_scale)
+    if source_space != "LPS":
+        # convert_coordinate_system expects (N,3) array
+        m.vertices = convert_coordinate_system(m.vertices, source_space, "LPS")
+    return m
+
+
+def _apply_canonicalization_points(
+    pts: np.ndarray,
+    source_space: str,
+    unit_scale: float,
+) -> np.ndarray:
+    p = np.asarray(pts, dtype=np.float64)
+    if unit_scale != 1.0:
+        p = p * float(unit_scale)
+    if source_space != "LPS":
+        p = convert_coordinate_system(p, source_space, "LPS")
+    return p
+
+
+def _transform_chain_from_ref(transforms_model, key: str | None) -> TransformChain:
+    """
+    Resolve a ConfigModel.transforms entry into a TransformChain.
+    Falls back to identity when key is None.
+    """
+    if not key:
+        return TransformChain.new([AffineTransform.identity()])
+
+    ref = transforms_model.get(key)
+    if ref is None:
+        raise KeyError(f"Unknown transform_key '{key}'")
+
+    if ref.kind == "identity":
+        return TransformChain.new([AffineTransform.identity()])
+
+    if ref.kind == "sitk_file":
+        return TransformChain.new([AffineTransform.from_sitk_path(Path(ref.path), inverted=ref.invert)])
+
+    raise ValueError(f"Unsupported transform kind: {ref.kind!r}")
+
+
+# -------------------------------------------------------------------------
+# Output bundle
+# -------------------------------------------------------------------------
+@dataclass(frozen=True)
+class CollisionLabelIndex:
+    label_to_bit: dict[str, int]
+    bit_to_label: dict[int, str]
+
+
+@dataclass(frozen=True)
+class RuntimeBundle:
+    # Catalog after loading/canonicalizing
+    asset_catalog: AssetCatalog  # runtime AssetSpec (with Mesh/PointsTransformable)
+    targets_pts: dict[str, np.ndarray]  # key -> (N,3) points in LPS mm
+    # Scene ready to render
+    scene: Scene
+    # Collision label bits (for adapters)
+    collision_labels: CollisionLabelIndex
+    plan_state: PlanningState
+
+
+# -------------------------------------------------------------------------
+# Main builder
+# -------------------------------------------------------------------------
+
+
+def _capabilities_from_list(lst) -> Capability:
+    val = 0
+    for c in lst or []:
+        # if Pydantic parsed as Capability already, bit-or directly
+        if isinstance(c, int):
+            val |= c
+        else:
+            # string fallback
+            val |= getattr(Capability, str(c))
+    return Capability(val)
+
+
+def _material_from_model(m: MaterialModel) -> Material:
+    return Material(
+        name=m.name,
+        color_hex_str=m.color,
+        opacity=m.opacity,
+        wireframe=m.wireframe,
+        visible=m.visible,
+    )
+
+
+def _collision_bits(policy: CollisionPolicyModel, label_to_bit: dict[str, int]) -> tuple[int, int]:
+    group_bits = label_to_bit.get(policy.group or "", 0)
+    mask_bits = 0
+    for lab in policy.mask:
+        mask_bits |= label_to_bit.get(lab, 0)
+    return group_bits, mask_bits
+
+
+def _resolve_canonicalization(
+    spec: BaseSpecModel,
+    cfg: ConfigModel,
+) -> Optional[CanonicalizationRuntime]:
+    # pick base: from ref, or inline, or safe default
+    if spec.canonicalization_ref:
+        try:
+            base = cfg.canonicalizations[spec.canonicalization_ref]
+        except KeyError:
+            raise KeyError(f"Unknown canonicalization_ref '{spec.canonicalization_ref}' for '{spec.key}'")
+    elif spec.canonicalization:
+        base = spec.canonicalization
+    else:
+        base = CanonicalizationDefModel(source_space="LPS", scale_to_mm=1.0, applied=True)
+
+    # overlay overrides (only provided fields)
+    if spec.canonicalization_override:
+        ov = spec.canonicalization_override
+        base = base.model_copy(update={k: v for k, v in ov.model_dump().items() if v is not None})
+
+    # materialize runtime CanonicalizationInfo
+    # (compile transform_key → TransformChain here if you want it eager)
+    tc = TransformChain.new([AffineTransform.identity()])
+    if base.transform:
+        tc = _transform_chain_from_ref(cfg.transforms, base.transform)
+
+    return CanonicalizationRuntime(
+        source_space=base.source_space,
+        scale_to_mm=base.scale_to_mm,
+        transform_file_to_canonical=tc,
+        applied=base.applied,
+        version=base.version,
+        fingerprint=base.fingerprint,
+    )
+
+
+def _canon_from_model(c: CanonicalizationDefModel) -> CanonicalizationRuntime:
+    # Keep transform_file_to_canonical as identity at runtime unless you actually bake/load it.
+    return CanonicalizationRuntime(
+        source_space=c.source_space,
+        scale_to_mm=c.scale_to_mm,
+        transform_file_to_canonical=TransformChain.new([AffineTransform.identity()]),
+        applied=c.applied,
+        version=c.version,
+    )
+
+
+def _base_spec_kwargs_from_model(
+    m: BaseSpecModel,
+    label_to_bit: dict[str, int],
+) -> dict[str, Any]:
+    group_bits, mask_bits = _collision_bits(m.collision, label_to_bit)
+    return dict(
+        key=m.key,
+        kind=m.kind.value,  # "mesh" | "points" | "lines"
+        role=m.role,  # keep enum if your runtime type expects it; else use m.role.value
+        default_material=_material_from_model(m.default_material),
+        metadata=dict(m.metadata),
+        tags=set(m.tags),
+        caps=_capabilities_from_list(m.caps),
+        collidable_group=group_bits,
+        collidable_mask=mask_bits,
+        pivot_LPS=np.array(m.pivot_LPS, float) if m.pivot_LPS else None,
+        bbox_hint=np.array(m.bbox_hint, float) if m.bbox_hint else None,
+    )
+
+
+# --- asset builder -----------------------------------------------------------
+
+
+def build_asset_spec(a: AssetSpecModel, label_to_bit: dict[str, int], chem: ChemShiftContext) -> AssetSpec:
+    base_kwargs = _base_spec_kwargs_from_model(a, label_to_bit)
+
+    mesh_tf: MeshTransformable | None = None
+    pts_tf: PointsTransformable | None = None
+
+    if a.src and a.loader:
+        loader_kwargs = a.loader_kwargs or {}
+        geo = load_geometry(Path(a.src), loader=a.loader, **loader_kwargs)
+        if a.kind == Kind.MESH:
+            if not isinstance(geo, trimesh.Trimesh):
+                raise TypeError(f"Asset '{a.key}' loader returned points but kind=MESH")
+            canon_mesh = _apply_canonicalization_mesh(
+                geo, a.canonicalization.source_space, a.canonicalization.scale_to_mm
+            )
+            if _should_apply_chem(a, chem):
+                shifted_vertices = chem.points_transform.apply_to(canon_mesh.vertices)
+                # TODO make sure inversion is correct
+                canon_mesh = trimesh.Trimesh(vertices=shifted_vertices, faces=canon_mesh.faces, process=False)
+            mesh_tf = MeshTransformable(canon_mesh)
+        elif a.kind == Kind.POINTS:
+            if isinstance(geo, trimesh.Trimesh):
+                raise TypeError(f"Asset '{a.key}' loader returned mesh but kind=POINTS")
+            pts = _apply_canonicalization_points(geo, a.canonicalization.source_space, a.canonicalization.scale_to_mm)
+            if _should_apply_chem(a, chem):
+                pts = chem.points_transform.apply_to(pts)
+            pts_tf = PointsTransformable(pts)
+        elif a.kind == Kind.LINES:
+            raise NotImplementedError("kind='lines' not implemented in loader")
+
+    return AssetSpec(
+        **base_kwargs,
+        source_path=Path(a.src) if a.src else None,
+        loader=a.loader,
+        mesh=mesh_tf,
+        points=pts_tf,
+    )
+
+
+# --- target builder (returns spec + resolved points array) -------------------
+CompiledTransforms = dict[str, AffineTransform]
+
+
+def compile_all_transforms(transforms: dict[str, TransformRecipeModel]) -> CompiledTransforms:
+    compiled: CompiledTransforms = {}
+    for key, recipe in transforms.items():
+        chain = compile_recipe_to_chain(recipe)
+        R, t = chain.composed_transform
+        compiled[key] = AffineTransform(R, t)
+    return compiled
+
+
+def resolve_transform_key_cached(key: Optional[str], cache: CompiledTransforms) -> AffineTransform:
+    if not key:
+        return AffineTransform.identity()
+    try:
+        return cache[key]
+    except KeyError:
+        raise KeyError(f"Unknown transform_key '{key}' (not found in compiled transforms)")
+
+
+def resolve_transform_ref_cached(ref: Optional[TransformRefModel], cache: CompiledTransforms) -> AffineTransform:
+    if ref is None:
+        return AffineTransform.identity()
+    if ref.key:
+        return resolve_transform_key_cached(ref.key, cache)
+    # Inline recipe: compile on the fly (not in cache by design)
+    return compile_recipe_to_chain(ref.inline)  # type: ignore[arg-type]
+
+
+def build_target_spec(
+    t: TargetSpecModel,
+    runtime_assets: dict[str, AssetSpec],
+    label_to_bit: dict[str, int],
+    chem: ChemShiftContext,
+    reducer_registry: dict[str, Callable[..., np.ndarray]],
+) -> tuple[TargetSpec, np.ndarray]:
+    base_kwargs = _base_spec_kwargs_from_model(t, label_to_bit)
+
+    # Targets must be non-collidable by default; enforce here (even if config forgot).
+    base_kwargs["caps"] = Capability.RENDERABLE
+    base_kwargs["collidable_group"] = 0
+    base_kwargs["collidable_mask"] = 0
+
+    # Resolve points (explicit file or derived by reducer)
+    if t.src and t.loader:
+        loader_kwargs = t.loader_kwargs or {}
+        pts = load_geometry(Path(t.src), loader=t.loader, **loader_kwargs)
+        if isinstance(pts, trimesh.Trimesh):
+            raise TypeError(f"Target '{t.key}' loader returned mesh; expected points")
+        pts = _apply_canonicalization_points(pts, t.canonicalization.source_space, t.canonicalization.scale_to_mm)
+        if _should_apply_chem(t, chem):
+            pts = chem.points_transform.apply_to(pts)
+        pts = np.asarray(pts, dtype=np.float64)
+        if pts.ndim == 1:
+            pts = pts.reshape(1, 3)
+    else:
+        # Derived: fetch source asset geometry first
+        src_key = t.source_key or ""
+        src_asset = runtime_assets.get(src_key)
+        if src_asset is None:
+            raise KeyError(f"Target '{t.key}' source_key '{src_key}' not found in loaded assets")
+        src_geo = (
+            src_asset.mesh.raw
+            if src_asset.mesh is not None
+            else (src_asset.points.raw if src_asset.points is not None else None)
+        )
+        if src_geo is None:
+            raise ValueError(f"Target '{t.key}': source asset '{src_key}' has no geometry loaded")
+
+        reducer_name = t.reducer or ""
+        reducer_fn = reducer_registry.get(reducer_name)
+        if reducer_fn is None:
+            raise KeyError(f"Unknown target reducer '{reducer_name}' for target '{t.key}'")
+
+        pt = reducer_fn(src_geo, **(t.reducer_kwargs or {}))  # should return (3,) or (1,3)
+        pts = np.asarray(pt, dtype=np.float64).reshape(1, 3)
+
+    spec = TargetSpec(
+        **base_kwargs,
+        kind="points",  # targets are points in runtime
+        role=Role.TARGET,
+        source_path=Path(t.src) if t.src else None,
+        loader=t.loader,
+        source_key=t.source_key,
+        reducer=t.reducer,
+        reducer_kwargs=dict(t.reducer_kwargs),
+        points=PointsTransformable(pts),
+        approach_vector=np.array(t.approach_vector, float) if t.approach_vector else None,
+        uncertainty_mm=t.uncertainty_mm,
+    )
+    return spec, pts
+
+
+def build_runtime_from_config(cfg: ConfigModel) -> RuntimeBundle:
+    # 1) collision labels → bit mapping
+    labels: list[str] = []
+    for a in cfg.assets:
+        if a.collision.group:
+            labels.append(a.collision.group)
+        labels.extend(a.collision.mask)
+    for t in cfg.targets:
+        if t.collision.group:
+            labels.append(t.collision.group)
+        labels.extend(t.collision.mask)
+    label_to_bit = _compile_collision_labels(labels)
+    bit_to_label = {v: k for k, v in label_to_bit.items()}
+    label_index = CollisionLabelIndex(label_to_bit=label_to_bit, bit_to_label=bit_to_label)
+    # 2) assets
+    chem = build_chemshift_context(cfg)
+    runtime_assets: dict[str, AssetSpec] = {}
+    for a in cfg.assets:
+        runtime_assets[a.key] = build_asset_spec(a, label_to_bit, chem)
+
+    # 3) targets (specs + points index)
+    runtime_targets: dict[str, TargetSpec] = {}
+    targets_pts: dict[str, Float3] = {}
+    for t in cfg.targets:
+        tspec, pts = build_target_spec(t, runtime_assets, label_to_bit, chem, _REDUCER_REGISTRY)
+        runtime_targets[tspec.key] = tspec
+        targets_pts[tspec.key] = pts
+
+    asset_catalog = AssetCatalog(assets=runtime_assets, targets=runtime_targets)
+
+    # 4) scene
+    scene = Scene()
+    for n in cfg.scene.nodes:
+        asset_key = n.asset
+        if asset_key not in runtime_assets:
+            raise KeyError(f"Scene node '{n.id}' references unknown asset '{asset_key}'")
+
+        node_tf = _transform_chain_from_ref(cfg.transforms, n.transform)
+
+        extras: dict[str, Any] = {}
+        locked_axes: set[str] = set()
+        if n.pose_source_probe:
+            extras["pose_source_probe"] = n.pose_source_probe
+            decl = cfg.plan.probes.get(n.pose_source_probe)
+            if decl and decl.calibrated:
+                locked_axes.update({"ap_tilt", "ml_tilt"})
+
+        scene.upsert(
+            NodeInstance(
+                id=n.id,
+                asset_key=asset_key,
+                transform=node_tf,
+                tags=set(n.tags),
+                material_override=None,
+                enabled=True,
+                locked_axes=locked_axes,
+                extras=extras,
+            )
+        )
+
+    # 5) kinematics, calibrations, plans (build PlanningState)
+    kinematics = Kinematics(arc_angles=dict(cfg.plan.arcs))
+    calibrations = _get_calibration_rt(cfg.plan.calibrations, cfg.plan.reticles)
+    probes: dict[str, ProbePlan] = {}
+    for probe_name, probe_decl in cfg.plan.probes.items():
+        probe_calibrated = probe_name in calibrations
+        if probe_calibrated:
+            ap, ml = find_probe_angle(calibrations[probe_name])
+        else:
+            ap = kinematics.get_arc(probe_decl.arc)
+            ml = probe_decl.slider_ml
+        probes[probe_name] = ProbePlan(
+            probe_type=probe_decl.kind,
+            arc_id=probe_decl.arc,
+            bind_ap_to_arc=probe_calibrated,
+            ap_local=ap,
+            ml_local=ml,
+            spin=probe_decl.spin,
+            past_target_mm=probe_decl.past_target_mm,
+            offsets_RA=probe_decl.offsets_RA,
+            target_key=probe_decl.target,
+            target_point_RAS=None,
+            calibrated=probe_calibrated,
+        )
+    plan_state = PlanningState(
+        kinematics=kinematics,
+        probes=probes,
+        calibrations=calibrations,
+        target_index=targets_pts,
+    )
+
+    return RuntimeBundle(
+        asset_catalog=asset_catalog,
+        targets_pts=targets_pts,
+        scene=scene,
+        collision_labels=label_index,
+        plan_state=plan_state,
+    )
+
+
+@dataclass(frozen=True)
+class SetProbeLocalAngles:
+    """Edit per-probe local angles (used when not bound to arc or when you unbind)."""
+
+    name: str
+    ap_local: Optional[float] = None  # deg
+    ml_local: Optional[float] = None  # deg
+    spin: Optional[float] = None  # deg
+
+
+@dataclass(frozen=True)
+class SetProbeOffsetsRA:
+    """Set absolute R/A offsets (in mm)."""
+
+    name: str
+    R_mm: Optional[float] = None
+    A_mm: Optional[float] = None
+
+
+@dataclass(frozen=True)
+class NudgeProbeOffsetsRA:
+    """Nudge offsets (delta in mm)."""
+
+    name: str
+    dR_mm: float = 0.0
+    dA_mm: float = 0.0
+
+
+@dataclass(frozen=True)
+class SetProbePastTarget:
+    """Set relative depth (mm). Positive increases insertion past the target."""
+
+    name: str
+    past_target_mm: float
+
+
+@dataclass(frozen=True)
+class NudgeProbePastTarget:
+    """Nudge depth (delta mm)."""
+
+    name: str
+    d_mm: float
+
+
+@dataclass(frozen=True)
+class SetProbeTarget:
+    """
+    Choose a target. Exactly one of target_key or target_point_RAS must be provided.
+    Passing None clears that field; use to switch between the two forms.
+    """
+
+    name: str
+    target_key: Optional[str] = None
+    target_point_RAS: Optional[Tuple[float, float, float]] = None
+
+
+# ---------- Arc & policy edits ----------
+
+
+@dataclass(frozen=True)
+class SetArcAngle:
+    """Set AP angle for an arc (deg)."""
+
+    arc_id: str
+    ap_deg: float
+
+
+@dataclass(frozen=True)
+class AssignProbeArc:
+    """Assign/unassign probe to an arc and optionally (un)bind AP to arc."""
+
+    name: str
+    arc_id: Optional[str]  # None = unassign from arc
+    bind_ap_to_arc: Optional[bool] = None
+
+
+@dataclass(frozen=True)
+class BindProbeAPToArc:
+    """Bind/unbind AP to the probe’s current arc."""
+
+    name: str
+    bind: bool
+    freeze_effective_on_unbind: bool = True  # capture current AP into ap_local on unbind
+
+
+@dataclass(frozen=True)
+class SetProbeCalibrated:
+    """Mark plan as 'use calibration if available'."""
+
+    name: str
+    calibrated: bool
+
+
+PlanningCommand = Union[
+    SetProbeLocalAngles,
+    SetProbeOffsetsRA,
+    NudgeProbeOffsetsRA,
+    SetProbePastTarget,
+    NudgeProbePastTarget,
+    SetProbeTarget,
+    SetArcAngle,
+    AssignProbeArc,
+    BindProbeAPToArc,
+    SetProbeCalibrated,
+]
+
+
+def apply_planning_command(ps: PlanningState, cmd: PlanningCommand) -> List[str]:
+    """
+    Mutates PlanningState in place.
+    Returns a list of probe names that should be re-resolved/re-rendered.
+    """
+    changed: Set[str] = set()
+
+    if isinstance(cmd, SetArcAngle):
+        # clamp to limits (and apply any separation policy if you added it)
+        ap = ps.kinematics.set_arc(cmd.arc_id, cmd.ap_deg)
+        # any non-calibrated probe bound to this arc is affected
+        for name, plan in ps.probes.items():
+            if plan.arc_id == cmd.arc_id and plan.bind_ap_to_arc:
+                # calibrated probes ignore arc changes
+                if not (plan.calibrated and name in ps.calibrations):
+                    changed.add(name)
+        return sorted(changed)
+
+    if isinstance(cmd, AssignProbeArc):
+        plan = ps.probes[cmd.name]
+        plan.arc_id = cmd.arc_id
+        if cmd.bind_ap_to_arc is not None:
+            plan.bind_ap_to_arc = bool(cmd.bind_ap_to_arc)
+        changed.add(cmd.name)
+        return sorted(changed)
+
+    if isinstance(cmd, BindProbeAPToArc):
+        plan = ps.probes[cmd.name]
+        if cmd.bind:
+            plan.bind_ap_to_arc = True
+        else:
+            # freeze current effective AP into ap_local so unbinding doesn't jump
+            if cmd.freeze_effective_on_unbind:
+                eff_ap, _, _ = _resolved_angles(cmd.name, ps)  # helper from earlier reply
+                plan.ap_local = eff_ap
+            plan.bind_ap_to_arc = False
+        changed.add(cmd.name)
+        return sorted(changed)
+
+    if isinstance(cmd, SetProbeCalibrated):
+        plan = ps.probes[cmd.name]
+        plan.calibrated = bool(cmd.calibrated)
+        changed.add(cmd.name)
+        return sorted(changed)
+
+    if isinstance(cmd, SetProbeLocalAngles):
+        plan = ps.probes[cmd.name]
+        if cmd.ap_local is not None:
+            plan.ap_local = ps.kinematics.limits.ap_deg.clamp(cmd.ap_local)
+        if cmd.ml_local is not None:
+            plan.ml_local = ps.kinematics.limits.ml_deg.clamp(cmd.ml_local)
+        if cmd.spin is not None:
+            plan.spin = ps.kinematics.limits.spin_deg.clamp(cmd.spin)
+        changed.add(cmd.name)
+        return sorted(changed)
+
+    if isinstance(cmd, SetProbeOffsetsRA):
+        plan = ps.probes[cmd.name]
+        R, A = plan.offsets_RA
+        if cmd.R_mm is not None:
+            R = float(cmd.R_mm)
+        if cmd.A_mm is not None:
+            A = float(cmd.A_mm)
+        plan.offsets_RA = (R, A)
+        changed.add(cmd.name)
+        return sorted(changed)
+
+    if isinstance(cmd, NudgeProbeOffsetsRA):
+        plan = ps.probes[cmd.name]
+        R, A = plan.offsets_RA
+        plan.offsets_RA = (R + float(cmd.dR_mm), A + float(cmd.dA_mm))
+        changed.add(cmd.name)
+        return sorted(changed)
+
+    if isinstance(cmd, SetProbePastTarget):
+        plan = ps.probes[cmd.name]
+        plan.past_target_mm = float(cmd.past_target_mm)
+        changed.add(cmd.name)
+        return sorted(changed)
+
+    if isinstance(cmd, NudgeProbePastTarget):
+        plan = ps.probes[cmd.name]
+        plan.past_target_mm = float(plan.past_target_mm + cmd.d_mm)
+        changed.add(cmd.name)
+        return sorted(changed)
+
+    if isinstance(cmd, SetProbeTarget):
+        plan = ps.probes[cmd.name]
+        # ensure exactly one is set
+        if (cmd.target_key is None) == (cmd.target_point_RAS is None):
+            raise ValueError("SetProbeTarget: specify exactly one of target_key or target_point_RAS")
+        plan.target_key = cmd.target_key
+        plan.target_point_RAS = cmd.target_point_RAS
+        changed.add(cmd.name)
+        return sorted(changed)
+
+    # Unknown command: no-op
+    return sorted(changed)
+
+
+# --- Reducer extension -----------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ViewMaterial:
+    color: int
+    opacity: float
+    wireframe: bool
+    visible: bool
 
 
 BlendMode = Literal["replace", "multiply", "screen", "alpha_over"]
@@ -942,7 +2197,7 @@ class OverlaySpec:
 @dataclass(slots=True)
 class OverlayState:
     # node_id -> list of overlays currently active
-    by_node: Dict[str, List[OverlaySpec]] = field(default_factory=dict)
+    by_node: dict[str, List[OverlaySpec]] = field(default_factory=dict)
 
     def set(self, node_id: str, *specs: OverlaySpec) -> None:
         self.by_node[node_id] = list(specs)
@@ -1024,249 +2279,6 @@ class CollisionOverlay:
         return _blend_over(base_color, self.overlay_color, self.overlay_alpha) if colliding else base_color
 
 
-@dataclass(frozen=True, slots=True)
-class GeometryRef:
-    """Reference to geometry living in AppAssets (Trimesh) or generated points."""
-
-    key: str  # e.g. 'brain', 'structure:PL', 'probe:NP-2.1:a', 'points:implant-targets'
-    kind: str  # 'mesh' | 'points' | 'lines'
-    # optionally: bbox, vertex count, etc. for fast diffs
-
-
-@dataclass(slots=True)
-class Node:
-    id: str
-    name: str
-    geom: GeometryRef
-    material: Material
-    tags: Set[str] = field(default_factory=set)  # e.g. {'static'} or {'dynamic', 'probe'}
-
-
-@dataclass(slots=True)
-class Scene:
-    nodes: Dict[str, NodeInstance] = field(default_factory=dict)
-
-    def upsert(self, node: NodeInstance):
-        self.nodes[node.id] = node
-
-    def remove(self, node_id: str):
-        self.nodes.pop(node_id, None)
-
-    def by_tag(self, tag: str):
-        return [n for n in self.nodes.values() if tag in n.tags]
-
-
-def scene_from_app(
-    data: AppData, geom: AppGeometry, colormap: str = "rainbow", remove_last_color: bool = True
-) -> Scene:
-    assets = data.assets
-    scene = Scene()
-
-    # Materials
-    mat_brain = Material("brain", "#EFC3CA", opacity=0.1)
-    mat_implant = Material("implant", "#FF00FF", opacity=1.0)
-    mat_well = Material("well", "#E7DDFF", opacity=1.0)
-    mat_head = Material("head", "#E2EAF4", opacity=1.0)
-    mat_cone = Material("cone", "#FFC8C8", opacity=1.0)
-
-    # Static nodes
-    scene.upsert(Node(id="brain", name="Brain", geom=GeometryRef("brain", "mesh"), material=mat_brain, tags={"static"}))
-    scene.upsert(
-        Node(
-            id="implant",
-            name="Implant",
-            geom=GeometryRef("implant", "mesh"),
-            material=mat_implant,
-            tags={"static", "implant"},
-        )
-    )
-    scene.upsert(
-        Node(
-            id="head",
-            name="Headframe",
-            geom=GeometryRef("headframe", "mesh"),
-            material=mat_head,
-            tags={"static", "headframe"},
-        )
-    )
-    scene.upsert(
-        Node(
-            id="well",
-            name="Well",
-            geom=GeometryRef("well", "mesh"),
-            material=mat_well,
-            tags={"static", "well"},
-        )
-    )
-    scene.upsert(
-        Node(
-            id="cone",
-            name="Cone",
-            geom=GeometryRef("cone", "mesh"),
-            material=mat_cone,
-            tags={"static", "cone"},
-        )
-    )
-    structures = list(assets.brain_structures.keys())
-    probes = list(data.probe_config.target_info_by_probe.keys())
-    names = list(set(structures) | set(probes))
-    colors = _get_colormap_colors(len(names) + 1, colormap_name=colormap)
-    colors = colors[:-1] if remove_last_color else colors
-    # Skip the first colormap_skip colors
-    color_lookup = {name: rgb_to_hex_string(*(255 * np.array(c)[:3]).astype(int)) for name, c in zip(names, colors)}
-    for structure_name in assets.brain_structures.keys():
-        color = color_lookup.get(structure_name, "#C8C8C8")
-        scene.upsert(
-            Node(
-                id=f"structure:{structure_name}",
-                name=structure_name,
-                geom=GeometryRef(f"structure:{structure_name}", "mesh"),
-                material=Material(structure_name, color_hex_str=color, opacity=0.1),
-                tags={"static", "structure"},
-            )
-        )
-    # Probes (dynamic)
-    for pname in geom.probes.keys():
-        # geom key identifies canonical geometry; transform is the pose
-        ptype = geom.probes[pname].probe_type
-        color = color_lookup.get(pname, "#C8C8C8")
-        scene.upsert(
-            Node(
-                id=f"probe:{pname}",
-                name=pname,
-                geom=GeometryRef(f"probe:{ptype}", "mesh"),
-                material=Material(pname, color_hex_str=color, opacity=1.0),
-                tags={"dynamic", "probe"},
-            )
-        )
-
-    return scene
-
-
-# Commands describe *intent* (what changed), not how to draw
-@dataclass(frozen=True)
-class SetProbeParams:
-    name: str
-    ap: Optional[float] = None
-    ml: Optional[float] = None
-    spin: Optional[float] = None
-    tip: Optional[NDArray[np.float64]] = None  # LPS coordinates, if provided
-
-
-@dataclass(frozen=True)
-class SetArcAngle:
-    arc_id: str
-    angle_deg: float
-    propagate: bool = True  # update all non-calibrated probes on this arc
-
-
-@dataclass(frozen=True)
-class AssignProbeArc:
-    probe_name: str
-    new_arc_id: str
-    # Optional: keep AP consistent by setting the arc's angle to current AP for this probe
-    snap_arc_to_current_ap: bool = False
-    propagate: bool = True  # after assignment, (optionally) update that probe's AP
-
-
-@dataclass(frozen=True)
-class SetProbeCalibration:
-    probe_name: str
-    calibration_transform: Optional[AffineTransform] = None
-
-
-# Union of the supported commands (add more later if needed)
-AnyCommand = Union[SetProbeParams, SetArcAngle, AssignProbeArc, SetProbeCalibration]
-
-
-# Pure function: apply a command to geometry and return a *new* geometry + which probes changed
-# --- Utilities used by reducer --------------------------------------------
-def _is_calibrated(geom: AppGeometry, probe_name: str) -> bool:
-    calibration = getattr(geom.probes[probe_name], "calibration_transform", None)
-    return calibration is not None
-
-
-def _iter_probes_on_arc(geom: AppGeometry, arc_id: str) -> Iterable[str]:
-    for name, pinfo in geom.data.probe_config.probe_info.items():
-        if pinfo.arc == arc_id:
-            yield name
-
-
-def _set_probe_pose(geom: AppGeometry, name: str, *, ap=None, ml=None, spin=None, tip=None) -> None:
-    pr = geom.probes[name]
-    pose = pr.pose
-    geom.probes[name].pose = replace(
-        pose,
-        ap=pose.ap if ap is None else ap,
-        ml=pose.ml if ml is None else ml,
-        spin=pose.spin if spin is None else spin,
-        tip=pose.tip if tip is None else tip,
-    )
-
-
-# --- Reducer extension -----------------------------------------------------
-def apply_command(geom: AppGeometry, cmd: AnyCommand) -> tuple[AppGeometry, list[str]]:
-    # Existing SetProbeParams branch (unchanged)
-    if isinstance(cmd, SetProbeParams):
-        name = cmd.name
-        _set_probe_pose(geom, name, ap=cmd.ap, ml=cmd.ml, spin=cmd.spin, tip=cmd.tip)
-        return geom, [name]
-
-    # New: set an arc's absolute AP angle (coupled update)
-    if isinstance(cmd, SetArcAngle):
-        pcfg = geom.data.probe_config
-        pcfg.arcs[cmd.arc_id] = float(cmd.angle_deg)
-
-        changed: list[str] = []
-        if cmd.propagate:
-            for pname in _iter_probes_on_arc(geom, cmd.arc_id):
-                if _is_calibrated(geom, pname):  # do not move calibrated probes
-                    continue
-                _set_probe_pose(geom, pname, ap=float(cmd.angle_deg))
-                changed.append(pname)
-        return geom, changed
-
-    # New: assign a probe to a different arc
-    if isinstance(cmd, AssignProbeArc):
-        pcfg = geom.data.probe_config
-        pname = cmd.probe_name
-        old_arc = pcfg.probe_info[pname].arc
-        pcfg.probe_info[pname].arc = cmd.new_arc_id
-
-        # Optionally snap the arc to the probe's current AP so reassignment is continuous
-        if cmd.snap_arc_to_current_ap:
-            curr_ap = float(geom.probes[pname].pose.ap)
-            pcfg.arcs[cmd.new_arc_id] = curr_ap
-
-        # Propagate AP to this probe (but never override calibrated)
-        changed = []
-        if cmd.propagate and not _is_calibrated(geom, pname):
-            new_ap = float(pcfg.arcs[cmd.new_arc_id])
-            _set_probe_pose(geom, pname, ap=new_ap)
-            changed.append(pname)
-
-        return geom, changed
-
-    # New: toggle calibration lock for a probe
-    if isinstance(cmd, SetProbeCalibration):
-        pname = cmd.probe_name
-        probe = geom.probes[pname]
-        probe.calibration_transform = cmd.calibration_transform
-        # When turning ON calibration, freeze current AP/ML; when OFF, AP will again follow its arc on next arc update.
-        return geom, [pname]
-
-    # Fallback (no-op)
-    return geom, []
-
-
-@dataclass(frozen=True)
-class ViewMaterial:
-    color: int
-    opacity: float
-    wireframe: bool
-    visible: bool
-
-
 class RenderBackend(Protocol):
     def create_mesh(
         self, node_id: str, *, name: str, vertices: np.ndarray, indices: np.ndarray, material: ViewMaterial
@@ -1340,20 +2352,20 @@ class _TransformCache:
 class RendererAdapter:
     backend: RenderBackend
     scene: Scene
-    assets: AppAssets
+    assets: AssetCatalog
     cache: _TransformCache = _TransformCache(maxsize=256)
     overlays: OverlayResolver | None = None
 
     # ----- public API -----
-    def build(self, geom: AppGeometry, coll: CollisionState | None = None) -> None:
+    def build(self, plan: PlanningState, coll: CollisionState | None = None) -> None:
         hot = coll.hot if coll else frozenset()
         for node in self.scene.nodes.values():
-            self._upsert_node(node, geom, node.id in hot)
+            self._upsert_node(node, plan, node.id in hot)
 
-    def sync_nodes(self, geom: AppGeometry, nodes: Iterable[Node], coll: CollisionState | None = None) -> None:
+    def sync_nodes(self, plan: PlanningState, nodes: Iterable[Node], coll: CollisionState | None = None) -> None:
         hot = coll.hot if coll else frozenset()
         for node in nodes:
-            self._upsert_node(node, geom, node.id in hot)
+            self._upsert_node(node, plan, node.id in hot)
 
     def remove(self, node_ids: Iterable[str]) -> None:
         self.backend.remove(node_ids)
@@ -1363,7 +2375,7 @@ class RendererAdapter:
         self.cache.invalidate_mesh(mesh_key)
 
     # ----- internals -----
-    def _upsert_node(self, node: Node, geom: AppGeometry, colliding: bool) -> None:
+    def _upsert_node(self, node: Node, plan: PlanningState, colliding: bool) -> None:
         base_vm = material_to_view(node.material)
         vm = self.overlays.apply(node.id, base_vm) if self.overlays else base_vm
 
@@ -1396,13 +2408,13 @@ class RendererAdapter:
         else:
             raise ValueError(f"Unsupported node kind: {node.geom.kind}")
 
-    def _pose_for_node(self, node: Node, geom: AppGeometry) -> Tuple[np.ndarray, np.ndarray]:
+    def _pose_for_node(self, node: Node, plan: PlanningState) -> Tuple[np.ndarray, np.ndarray]:
         if node.id.startswith("probe:"):
             pname = node.id.split(":", 1)[1]
-            return geom.probes[pname].pose.chain().composed_transform
+            return plan.probes[pname].pose.chain().composed_transform
         return np.eye(3, dtype=np.float64), np.zeros(3, dtype=np.float64)
 
-    def _resolve_mesh(self, key: str, a: AppAssets) -> trimesh.Trimesh:
+    def _resolve_mesh(self, key: str, a: AssetCatalog) -> trimesh.Trimesh:
         if key == "brain":
             return a.brain_mesh.raw
         if key == "implant":
@@ -1421,17 +2433,15 @@ class RendererAdapter:
             return a.probe_models[key.split(":", 1)[1]].raw  # TYPE, not name
         raise KeyError(f"Unknown mesh key: {key}")
 
-    def _resolve_points(self, key: str, a: AppAssets) -> np.ndarray:
-        if key == "implant-targets":
-            return a.implant_segmentation.raw
+    def _resolve_points(self, key: str, a: AssetCatalog) -> np.ndarray:
         raise KeyError(f"Unknown points key: {key}")
 
 
 @dataclass
 class K3DBackend(RenderBackend):
     plot: k3d.Plot
-    _handles: Dict[str, Any] = field(default_factory=dict)
-    _kinds: Dict[str, str] = field(default_factory=dict)  # 'mesh'|'points'
+    _handles: dict[str, Any] = field(default_factory=dict)
+    _kinds: dict[str, str] = field(default_factory=dict)  # 'mesh'|'points'
 
     def create_mesh(self, node_id, *, name, vertices, indices, material):
         h = k3d.mesh(
@@ -1497,16 +2507,16 @@ class K3DBackend(RenderBackend):
                         h.visible = False
 
 
-Subscriber = Callable[[AppGeometry, List[str]], None]
+Subscriber = Callable[[PlanningState, List[str]], None]
 
 
-class GeometryStore:
-    def __init__(self, initial: AppGeometry):
+class PlanStore:
+    def __init__(self, initial: PlanningState):
         self._state = initial
         self._subs: List[Subscriber] = []
 
     @property
-    def state(self) -> AppGeometry:
+    def state(self) -> PlanningState:
         return self._state
 
     def subscribe(self, fn: Subscriber) -> Callable[[], None]:
@@ -1524,8 +2534,8 @@ class GeometryStore:
         for fn in list(self._subs):
             fn(self._state, changed)
 
-    def dispatch(self, cmd: AnyCommand) -> None:
-        new_state, changed = apply_command(self._state, cmd)  # your existing pure function
+    def dispatch(self, cmd: PlanningCommand) -> None:
+        changed = apply_planning_command(self._state, cmd)  # your existing pure function
         self._state = new_state
         self._notify(changed)
 
@@ -1542,9 +2552,9 @@ class DebouncedCoalescer:
         self._lock = threading.Lock()
         self._timer: Optional[threading.Timer] = None
         self._pending_ids: Set[str] = set()
-        self._latest_state: Optional[AppGeometry] = None
+        self._latest_state: Optional[PlanningState] = None
 
-    def __call__(self, state: AppGeometry, changed_ids: List[str]) -> None:
+    def __call__(self, state: PlanningState, changed_ids: List[str]) -> None:
         with self._lock:
             self._latest_state = state
             self._pending_ids.update(changed_ids)
@@ -1614,9 +2624,9 @@ class CollisionBackend(Protocol):
 @dataclass
 class FCLBackend(CollisionBackend):
     _mgr: fcl.DynamicAABBTreeCollisionManager = field(default_factory=fcl.DynamicAABBTreeCollisionManager)
-    _node_to_obj: Dict[str, fcl.CollisionObject] = field(default_factory=dict)
-    _geomid_to_node: Dict[int, str] = field(default_factory=dict)  # id(CollisionGeometry) -> node_id
-    _node_to_geomid: Dict[str, int] = field(default_factory=dict)  # node_id -> id(CollisionGeometry)
+    _node_to_obj: dict[str, fcl.CollisionObject] = field(default_factory=dict)
+    _geomid_to_node: dict[int, str] = field(default_factory=dict)  # id(CollisionGeometry) -> node_id
+    _node_to_geomid: dict[str, int] = field(default_factory=dict)  # node_id -> id(CollisionGeometry)
 
     def rebuild(self, specs: Iterable[ObjSpec]) -> None:
         self._mgr.clear()
@@ -1688,13 +2698,13 @@ class FCLBackend(CollisionBackend):
         self,
         contacts: Iterable[fcl.Contact],
         *,
-        extra_map: Optional[Dict[int, str]] = None,
+        extra_map: Optional[dict[int, str]] = None,
     ) -> List[CollisionPair]:
-        gid_to_name: Dict[int, str] = dict(self._geomid_to_node)
+        gid_to_name: dict[int, str] = dict(self._geomid_to_node)
         if extra_map:
             gid_to_name.update(extra_map)
 
-        groups: Dict[Tuple[str, str], List[Contact]] = {}
+        groups: dict[Tuple[str, str], List[Contact]] = {}
         for c in contacts:
             n1 = gid_to_name.get(id(c.o1))
             n2 = gid_to_name.get(id(c.o2))
@@ -1764,15 +2774,15 @@ def default_include(node: Node) -> bool:
 class CollisionAdapter:
     backend: CollisionBackend
     scene: Scene
-    assets: AppAssets
+    assets: AssetCatalog
     include: Callable[[Node], bool] = default_include
 
     # ---- lifecycle wiring ----
-    def rebuild(self, geom: AppGeometry) -> None:
-        specs = [s for n in self.scene.nodes.values() if self.include(n) for s in [self._spec_for_node(n, geom)] if s]
+    def rebuild(self, plan: PlanningState) -> None:
+        specs = [s for n in self.scene.nodes.values() if self.include(n) for s in [self._spec_for_node(n, plan)] if s]
         self.backend.rebuild(specs)
 
-    def on_store_change(self, geom: AppGeometry, changed_probe_names: List[str]) -> None:
+    def on_store_change(self, plan: PlanningState, changed_probe_names: List[str]) -> None:
         # Only probes move; map probe names -> scene nodes
         nodes: List[Node] = []
         for pname in changed_probe_names:
@@ -1782,7 +2792,7 @@ class CollisionAdapter:
                 nodes.append(node)
         if not nodes:
             return
-        specs = [self._spec_for_node(n, geom) for n in nodes]
+        specs = [self._spec_for_node(n, plan) for n in nodes]
         self.backend.sync([s for s in specs if s is not None])
 
     def remove_nodes(self, node_ids: Iterable[str]) -> None:
@@ -1801,22 +2811,22 @@ class CollisionAdapter:
         return self.backend.collide_one_to_many(spec, enable_contacts=True, max_contacts=8)
 
     # ---- domain → backend spec ----
-    def _spec_for_node(self, node: Node, geom: AppGeometry) -> Optional[ObjSpec]:
+    def _spec_for_node(self, node: Node, plan: PlanningState) -> Optional[ObjSpec]:
         if node.geom.kind != "mesh":
             return None
         base = self._resolve_mesh(node.geom.key, self.assets)
         bvh = _bvh_from_mesh(base, name=node.geom.key)  # unique geometry per node
-        R, t = self._pose_for_node(node, geom)
+        R, t = self._pose_for_node(node, plan)
         tf = _rt_to_transform(R, t, name=f"pose:{node.id}")
         return ObjSpec(node_id=node.id, geom=bvh, transform=tf)
 
-    def _pose_for_node(self, node: Node, geom: AppGeometry) -> Tuple[np.ndarray, np.ndarray]:
+    def _pose_for_node(self, node: Node, plan: PlanningState) -> Tuple[np.ndarray, np.ndarray]:
         if node.id.startswith("probe:"):
             pname = node.id.split(":", 1)[1]
-            return geom.probes[pname].pose.chain().composed_transform
+            return plan.probes[pname].pose.chain().composed_transform
         return np.eye(3, dtype=np.float64), np.zeros(3, dtype=np.float64)
 
-    def _resolve_mesh(self, key: str, a: AppAssets) -> trimesh.Trimesh:
+    def _resolve_mesh(self, key: str, a: AssetCatalog) -> trimesh.Trimesh:
         if key == "implant":
             return a.implant_mesh.raw
         if key == "headframe":
@@ -1842,8 +2852,8 @@ def objects_in_collision(collision_pairs: List[CollisionPair]) -> List[Tuple[str
 
 @dataclass
 class StoreSubscriber:
-    store: GeometryStore
-    on_event: Callable[[AppGeometry, List[str]], None]
+    store: PlanStore
+    on_event: Callable[[PlanningState, List[str]], None]
 
     def __post_init__(self):
         self._unsubscribe = self.store.subscribe(self.on_event)
@@ -1862,12 +2872,12 @@ class RenderHandler:
     # optional shared view-state (e.g., overlays from collisions)
     get_collision_state: Callable[[], CollisionState] | None = None
 
-    def __call__(self, geom: AppGeometry, changed_ids: List[str]) -> None:
+    def __call__(self, plan: PlanningState, changed_ids: List[str]) -> None:
         # map probe ids → scene nodes; extend as needed
         nodes = [self.scene.nodes.get(f"probe:{pid}") for pid in changed_ids]
         nodes = [n for n in nodes if n is not None]
         # let the adapter apply overlays if provided
-        self.adapter.sync_nodes(geom, nodes, coll=self.get_collision_state() if self.get_collision_state else None)
+        self.adapter.sync_nodes(plan, nodes, coll=self.get_collision_state() if self.get_collision_state else None)
 
 
 def _diff_hot(curr: CollisionState, prev: CollisionState | None = None) -> set[str]:
@@ -1882,14 +2892,14 @@ class CollisionHandler:
     scene: Scene
     adapter: CollisionAdapter
     state: CollisionState = field(default_factory=CollisionState)
-    on_state_changed: Optional[Callable[[CollisionState, Set[str], AppGeometry], None]] = None
+    on_state_changed: Optional[Callable[[CollisionState, Set[str], PlanningState], None]] = None
     _prev_state: CollisionState | None = None
 
-    def __call__(self, geom: AppGeometry, changed_ids: List[str]) -> None:
+    def __call__(self, plan: PlanningState, changed_ids: List[str]) -> None:
         # keep backend up-to-date for moved probes
         moved = [pid for pid in changed_ids if f"probe:{pid}" in self.scene.nodes]
         if moved:
-            self.adapter.on_store_change(geom, moved)
+            self.adapter.on_store_change(plan, moved)
 
         # recompute collisions
         pairs = self.adapter.collide_internal(enable_contacts=False)
@@ -1901,11 +2911,11 @@ class CollisionHandler:
         self._prev_state = new_state
         self.state = new_state
         if flips and self.on_state_changed:
-            self.on_state_changed(new_state, flips, geom)
+            self.on_state_changed(new_state, flips, plan)
 
 
 def on_collisions_changed_lambda(renderer_adapter: RendererAdapter, scene: Scene, overlays_state: OverlayState):
-    def _on_collisions_changed(state: CollisionState, flips: Set[str], geom: AppGeometry) -> None:
+    def _on_collisions_changed(state: CollisionState, flips: Set[str], plan: PlanningState) -> None:
         # update overlays by source "collision"
         overlays_state.clear_source("collision")
         if state.hot:
@@ -1915,7 +2925,7 @@ def on_collisions_changed_lambda(renderer_adapter: RendererAdapter, scene: Scene
         # repaint only nodes whose hot/cold status flipped
         nodes = [scene.nodes[nid] for nid in flips if nid in scene.nodes]
         if nodes:
-            renderer_adapter.sync_nodes(geom, nodes)  # adapter reads overlays internally
+            renderer_adapter.sync_nodes(plan, nodes)  # adapter reads overlays internally
 
     return _on_collisions_changed
 
@@ -1923,8 +2933,8 @@ def on_collisions_changed_lambda(renderer_adapter: RendererAdapter, scene: Scene
 @dataclass
 class ProbeWidgetController:
     data: AppData
-    store: GeometryStore
-    assets: AppAssets
+    store: PlanStore
+    assets: AssetCatalog
     plot: k3d.Plot
     render_adapter: RendererAdapter
     collision_handler: CollisionHandler
@@ -2000,10 +3010,10 @@ class ProbeWidgetController:
         return pname, self.store.state.probes[pname] if pname else (None, None)
 
     def _probe_arc_id(self, probe_name: str) -> str:
-        return self.data.probe_config.probe_info[probe_name].arc
+        return self.data.plan.probe_info[probe_name].arc
 
     def _arc_angle(self, arc_id: str) -> float:
-        return float(self.data.probe_config.arcs[arc_id])
+        return float(self.data.plan.arcs[arc_id])
 
     def _target_names(self) -> list[str]:
         return sorted(self.assets.targets.keys())
@@ -2018,7 +3028,7 @@ class ProbeWidgetController:
     def _dispatch_tip_only(self, probe_name: str, tip_lps: np.ndarray):
         probe = self.store.state.probes[probe_name]
         self.store.dispatch(
-            SetProbeParams(
+            SetProbePlanPose(
                 name=probe_name,
                 ap=probe.pose.ap,  # unchanged
                 ml=probe.pose.ml,  # unchanged
@@ -2030,7 +3040,7 @@ class ProbeWidgetController:
     def _dispatch_pose(self, probe_name: str, ap: float, ml: float, spin: float, tip_lps: np.ndarray | None = None):
         probe = self.store.state.probes[probe_name]
         self.store.dispatch(
-            SetProbeParams(
+            SetProbePlanPose(
                 name=probe_name,
                 ap=ap,
                 ml=ml,
@@ -2081,7 +3091,7 @@ class ProbeWidgetController:
         if not pname:
             return
         arc_id = self._probe_arc_id(pname)
-        self.store.dispatch(SetArcAngle(arc_id=arc_id, angle_deg=float(self.ap_tilt_deg.value), propagate=True))
+        self.store.dispatch(SetArcAngle(arc_id=arc_id, angle_deg=float(self.ap_tilt_deg.value)))
 
     # ---------- load UI from domain ----------
     def _load_probe_into_widgets(self, probe_name: str):
@@ -2089,7 +3099,7 @@ class ProbeWidgetController:
         arc_id = self._probe_arc_id(probe_name)
 
         # keep options in sync (in case arcs were added/removed elsewhere)
-        self.arc_assign_dd.options = sorted(self.data.probe_config.arcs.keys())
+        self.arc_assign_dd.options = sorted(self.data.plan.arcs.keys())
         self.arc_assign_dd.value = arc_id  # select current arc
 
         self.arc_label.value = f"<b>Arc:</b> {arc_id} &nbsp; (<i>AP coupled</i>)"
@@ -2124,7 +3134,7 @@ class ProbeWidgetController:
         self.arc_label = widgets.HTML(layout={"width": "180px"})
 
         self.arc_assign_dd = widgets.Dropdown(
-            options=sorted(self.data.probe_config.arcs.keys()),
+            options=sorted(self.data.plan.arcs.keys()),
             description="Arc:",
             layout={"width": "140px"},
         )
@@ -2333,27 +3343,13 @@ class ProbeWidgetController:
 app_cfg = OmegaConf.load(config_files["app_config"])
 app_cfg_resolved = OmegaConf.to_container(app_cfg, resolve=True)
 # Create validated Pydantic model
-app_config = AppConfig(**app_cfg_resolved)
-
-probe_config = config_files.get("probe_config", None)
-if probe_config:
-    probe_cfg = OmegaConf.load(probe_config)
-    probe_cfg_resolved = OmegaConf.to_container(probe_cfg, resolve=True)
-    probe_config = ProbeConfig(**probe_cfg_resolved)
-else:
-    structures = app_config.target_structures
-    probe_config = ProbeConfig(
-        arcs={"a": 0.0},
-        probe_info={struct: ProbeInfo(arc="a") for struct in structures},
-        target_info_by_probe={struct: TargetInfo() for struct in structures},
-    )
 # %%
-assets = AppAssets.from_app_config(app_config)
+assets = AssetCatalog.from_app_config(app_config)
 # %%
-data = AppData(assets=assets, probe_config=probe_config)
-geom = AppGeometry.from_app_data(data, ignore_calibrations=True)
-scene = scene_from_app(data, geom)
-store = GeometryStore(geom)
+data = AppData(assets=assets, plan=probe_config)
+plan = PlanningState.from_app_data(data, ignore_calibrations=True)
+scene = scene_from_app(data, plan)
+store = PlanStore(plan)
 overlays_state = OverlayState()
 overlays_resolver = OverlayResolver(overlays_state)
 # backends
@@ -2364,8 +3360,8 @@ render_adapter = RendererAdapter(backend=k3d_backend, scene=scene, assets=assets
 collision_adapter = CollisionAdapter(backend=fcl_backend, scene=scene, assets=assets)
 
 # Initial build
-render_adapter.build(geom)
-collision_adapter.rebuild(geom)
+render_adapter.build(plan)
+collision_adapter.rebuild(plan)
 
 # Collision view-state
 collision_handler = CollisionHandler(
