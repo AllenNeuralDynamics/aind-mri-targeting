@@ -17,7 +17,7 @@ readme = "README.md"
 version = "0.1.5"
 
 dependencies = [
-  'aind-anatomical-utils>=0.1,<0.4',
+  'aind-anatomical-utils>=0.1,<0.5',
   'aind_mri_utils>=0.10,<2',
   'numpy>=1.20,<3',
   "pandas>=2,<3",
@@ -39,7 +39,7 @@ fit_implant = "aind_mri_targeting.scripts.fit_implant:main"
 
 [dependency-groups]
 dev = ['codespell', 'pytest', 'pytest-cov', 'ruff', 'interrogate']
-vscode = [{include-group = 'dev'}, 'ipykernel', 'pip']
+jupyter = [{include-group = 'dev'}, 'ipykernel', 'pip']
 docs = [
   {include-group = 'dev'},
   'mkdocs',
@@ -57,7 +57,7 @@ readme = { file = "README.md", content-type = "text/markdown" }
 
 [tool.ruff]
 line-length = 120
-target-version = 'py313'
+target-version = 'py39'
 
 [tool.ruff.lint]
 extend-select = ['Q', 'RUF100', 'C90', 'I', 'F', 'E', 'W']
