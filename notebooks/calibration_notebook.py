@@ -102,10 +102,23 @@ def _round_targets(target, probe_target):
 # %% [markdown]
 # Target CSV format: required columns are `point` (string, used as index),
 # `ML (mm)`, `AP (mm)`, `DV (mm)` (floats, bregma-relative in mm, RAS convention:
-# R→ML, A→AP, S→DV). Optional column: `point source` (string, informational).
+# R→ML, A→AP, S→DV). Optional columns: `point source` (string, informational),
+# `distance_past_target` (float, mm; read automatically if `targets_by_probe` is
+# used instead of `targets_and_overshoots_by_probe`).
+# Old-format CSVs with columns `structure`, `target_pt_R`, `target_pt_A`,
+# `target_pt_S` are also accepted and renamed automatically.
 # %%
 if target_file:
     target_df = pd.read_csv(target_file)
+    col_names = target_df.keys()
+    if "structure" in col_names:
+        target_df = target_df.rename(columns={"structure": "point"})
+    if "target_pt_R" in col_names:
+        target_df = target_df.rename(columns={
+            "target_pt_R": "ML (mm)",
+            "target_pt_A": "AP (mm)",
+            "target_pt_S": "DV (mm)",
+        })
     target_df = target_df.set_index("point")
 else:
     target_df = None
@@ -136,20 +149,37 @@ target_df
 # where `[x, y, z]` are the coordinates in mm.
 
 # %%
-# Set experiment configuration # here
+# Set experiment configuration here
 #
-# Names of targets in the target file and overshoots
-# targets_and_overshoots_by_probe = {probe_id: (target_name, overshoot), ...}
-# overshoot in µm
-targets_and_overshoots_by_probe = {
-    46110: ("Hole 1", 500),
-    46100: ("Hole 2", 500),
+# Option A: read overshoot from the `distance_past_target` column of the target CSV.
+# targets_by_probe = {probe_id: target_name, ...}
+targets_by_probe = {
+    # 46110: "Hole 1",
+    # 46100: "Hole 2",
 }
+# Option B: specify overshoot manually in µm.
+# targets_and_overshoots_by_probe = {probe_id: (target_name, overshoot_um), ...}
+targets_and_overshoots_by_probe = {
+    # 46110: ("Hole 1", 500),
+    # 46100: ("Hole 2", 500),
+}
+# Populate targets_and_overshoots_by_probe from targets_by_probe + CSV if provided
+if targets_by_probe:
+    for key, target_name in targets_by_probe.items():
+        overshoot_um = (
+            target_df.loc[target_name, "distance_past_target"] * 1000
+            if target_df is not None and target_name in target_df.index
+            and "distance_past_target" in target_df.columns
+            else 0
+        )
+        targets_and_overshoots_by_probe[key] = (target_name, overshoot_um)
+# Optional RAS mm offset applied to every target before transforming
+fudge_vector = np.array([0, 0, 0])
 # Targets in bregma-relative coordinates not in the target file
 # manual_bregma_targets_by_probe = {probe_id: [x, y, z], ...}
 # x y z in mm
 manual_bregma_targets_by_probe = {
-    "pipette": [1, 1, -1],  # in mm!
+    # "pipette": [1, 1, -1],
 }
 
 
@@ -193,6 +223,16 @@ else:
         reticle_rotation,
     )
     t_reticle_to_bregma = reticle_offset
+    for path in parallax_calibration_paths[1:]:
+        (
+            this_cal_by_probe,
+            _,
+            this_pairs_by_probe,
+            this_errs_by_probe,
+        ) = debug_parallax_calibration(path, reticle_offset, reticle_rotation)
+        combined_cal_by_probe.update(this_cal_by_probe)
+        combined_pairs_by_probe.update(this_pairs_by_probe)
+        errs_by_probe.update(this_errs_by_probe)
 # %% [markdown]
 # ## Probe targets in manipulator coordinates
 # Get the transformed targets in manipulator coordinates using the fitted
@@ -211,7 +251,7 @@ for probe, (target_name, overshoot) in targets_and_overshoots_by_probe.items():
     if target_df is None or target_name not in target_df.index:
         logger.warning(f"Target {target_name} not found in target file")
         continue
-    target = target_df.loc[target_name, dims].to_numpy().astype(np.float64)
+    target = target_df.loc[target_name, dims].to_numpy().astype(np.float64) + fudge_vector
     overshoot_arr = np.array([0, 0, overshoot / 1000])
     combined_targets_and_overshoots_by_probe[probe] = (
         target_name,
