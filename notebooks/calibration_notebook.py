@@ -99,6 +99,10 @@ def _round_targets(target, probe_target):
     return target_rnd, probe_target_and_overshoot_rnd
 
 
+# %% [markdown]
+# Target CSV format: required columns are `point` (string, used as index),
+# `ML (mm)`, `AP (mm)`, `DV (mm)` (floats, bregma-relative in mm, RAS convention:
+# R→ML, A→AP, S→DV). Optional column: `point source` (string, informational).
 # %%
 if target_file:
     target_df = pd.read_csv(target_file)
