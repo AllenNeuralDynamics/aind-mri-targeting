@@ -39,7 +39,13 @@ fit_implant = "aind_mri_targeting.scripts.fit_implant:main"
 
 [dependency-groups]
 dev = ['codespell', 'pytest', 'pytest-cov', 'ruff', 'interrogate']
-jupyter = [{include-group = 'dev'}, 'ipykernel', 'pip']
+jupyter = [
+    {include-group = 'dev'},
+    'ipykernel',
+    "ipympl>=0.10.0",
+    "matplotlib>=3.9.4",
+    'pip',
+]
 docs = [
   {include-group = 'dev'},
   'mkdocs',
