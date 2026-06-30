@@ -1,6 +1,4 @@
-"""
-utilities
-"""
+"""Utilities."""
 
 import glob
 import os
@@ -98,9 +96,7 @@ def check_output_path(output_path=None):
 
 
 def err_if_files_exist(files, error_message="File {} already exists. Set force=True to overwrite."):
-    """
-    Check if the given files already exist and raise a FileExistsError if any
-    of them do.
+    """Check if the given files already exist and raise a FileExistsError if any of them do.
 
     Parameters
     ----------

@@ -1,0 +1,26 @@
+# Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
+_commit: 0.1.16
+_src_path: /home/galen.lynch/Documents/Code/aind-python-copier-template
+author_email: galen@galenlynch.com
+author_fullname: Galen Lynch
+auto_setup_repo: false
+current_year: '2026'
+github_org: AllenNeuralDynamics
+github_url: https://github.com/AllenNeuralDynamics/aind-mri-targeting
+include_claude_md: true
+include_cli: true
+include_commitizen: true
+include_docs: false
+include_notebooks: true
+include_type_hints: false
+institute_name: Allen Institute for Neural Dynamics
+license: MIT
+project_description: Tools to plan and execute MRI-guided targeting experiments
+project_name: AIND MRI Targeting
+project_slug: aind-mri-targeting
+publish_to_pypi: true
+python_package_import_name: aind_mri_targeting
+python_version: '3.10'
+target_python_version: '3.13'
+workflow_source: AllenNeuralDynamics/galen-uv-workflows
+workflow_version: v2

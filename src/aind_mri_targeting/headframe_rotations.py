@@ -1,6 +1,4 @@
-"""
-Routines for finding the centers of mass and rotations of headframes
-"""
+"""Routines for finding the centers of mass and rotations of headframes."""
 
 import os
 from pathlib import Path
@@ -15,6 +13,7 @@ from . import util as mrt_ut
 
 
 def try_open_sitk(path: str) -> sitk.Image:
+    """Read an image from `path` with SimpleITK, raising if it does not exist."""
     if not os.path.exists(path):
         raise FileNotFoundError(f"File {path} not found")
     return sitk.ReadImage(path)
@@ -26,6 +25,7 @@ def create_savenames(
     orient_names: Tuple[str, str],
     ap_names: Tuple[str, str],
 ) -> Dict[str, Dict[str, Path]]:
+    """Build a nested dict of save paths keyed by orientation and AP name."""
     save_names = dict()
     for orient in orient_names:
         save_names[orient] = dict()
@@ -45,9 +45,7 @@ def headframe_centers_of_mass(
     force: bool = False,
     ignore_list: List[str] = [],
 ) -> None:
-    """
-    Compute the centers of mass for headframe segments in MRI images and save
-    them to files.
+    """Compute the centers of mass for headframe segments in MRI images and save them to files.
 
     Parameters
     ----------

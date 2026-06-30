@@ -11,9 +11,9 @@ from aind_mri_utils.rotations import rotation_matrix_to_sitk
 
 
 def find_hole_files(directory_or_files, hole_file_pattern=r"Hole(\d+).obj"):
-    """
-    Find all hole files in a directory or from a list of files and return a
-    dictionary mapping hole numbers to file paths.
+    r"""Find all hole files in a directory or from a list of files.
+
+    Returns a dictionary mapping hole numbers to file paths.
 
     Parameters
     ----------
@@ -71,9 +71,7 @@ def find_hole_files(directory_or_files, hole_file_pattern=r"Hole(\d+).obj"):
 
 
 def load_convert_trimesh(file, source_cs="ASR", target_cs="LPS"):
-    """
-    Load a trimesh object from a file and convert its vertices from one
-    coordinate system to another.
+    """Load a trimesh object from a file and convert its vertices from one coordinate system to another.
 
     Parameters
     ----------
@@ -102,9 +100,9 @@ def find_load_meshes(
     hole_file_kws={},
     load_convert_kws={},
 ):
-    """
-    Find all hole files in a directory, load them as trimesh objects and
-    convert their vertices to a target coordinate system.
+    """Find all hole files in a directory, load them as trimesh objects.
+
+    Vertices of each mesh are converted to a target coordinate system.
 
     Parameters
     ----------
