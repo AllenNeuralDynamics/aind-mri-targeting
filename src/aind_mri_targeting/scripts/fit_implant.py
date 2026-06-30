@@ -1,6 +1,4 @@
-"""
-Command line script to calculate the transformation matrix to fit the implant
-"""
+"""Command line script to calculate the transformation matrix to fit the implant."""
 
 import argparse
 
@@ -8,6 +6,7 @@ from aind_mri_targeting.implant_rotations import fit_implant_to_mri_from_files
 
 
 def parse_args():
+    """Parse command line arguments for the implant fitting script."""
     parser = argparse.ArgumentParser(description="Calculate the volume transformation matrix of an implant")
     parser.add_argument("segmentation", help="path to the segmentation file")
     parser.add_argument("hole_dir", help="directory containing the hole files")
@@ -31,6 +30,7 @@ def parse_args():
 
 
 def main():
+    """Parse arguments and fit the implant transformation matrix from MRI and hole files."""
     args = parse_args()
     fit_implant_to_mri_from_files(
         args.segmentation,

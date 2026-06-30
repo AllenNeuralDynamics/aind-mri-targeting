@@ -1,6 +1,4 @@
-"""
-Command line script to calculate find candidate headframe transforms
-"""
+"""Command line script to calculate find candidate headframe transforms."""
 
 import argparse
 
@@ -8,6 +6,7 @@ from .. import headframe_rotations as hr
 
 
 def parse_args():
+    """Parse command line arguments for the headframe transforms script."""
     parser = argparse.ArgumentParser(description="Calculate headframe transforms from MRI and segmentation")
     parser.add_argument("mri", help="path to the MRI file")
     parser.add_argument("segmentation", help="path to the segmentation file")
@@ -40,6 +39,7 @@ def parse_args():
 
 
 def main():
+    """Parse arguments and calculate headframe transforms from MRI and segmentation."""
     args = parse_args()
     hr.calculate_headframe_transforms(
         args.mri,

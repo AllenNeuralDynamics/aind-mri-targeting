@@ -1,6 +1,4 @@
-"""
-Command line script to calculate the center of mass of headframe segments
-"""
+"""Command line script to calculate the center of mass of headframe segments."""
 
 import argparse
 
@@ -8,6 +6,7 @@ from .. import headframe_rotations as hr
 
 
 def parse_args():
+    """Parse command line arguments for the headframe centers of mass script."""
     parser = argparse.ArgumentParser(description="Calculate the center of mass of the headframes")
     parser.add_argument("mri", help="path to the MRI file")
     parser.add_argument("segmentation", help="path to the segmentation file")
@@ -32,6 +31,7 @@ def parse_args():
 
 
 def main():
+    """Parse arguments and compute headframe segment centers of mass."""
     args = parse_args()
     hr.headframe_centers_of_mass(
         args.mri,

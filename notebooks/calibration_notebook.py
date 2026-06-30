@@ -114,11 +114,13 @@ if target_file:
     if "structure" in col_names:
         target_df = target_df.rename(columns={"structure": "point"})
     if "target_pt_R" in col_names:
-        target_df = target_df.rename(columns={
-            "target_pt_R": "ML (mm)",
-            "target_pt_A": "AP (mm)",
-            "target_pt_S": "DV (mm)",
-        })
+        target_df = target_df.rename(
+            columns={
+                "target_pt_R": "ML (mm)",
+                "target_pt_A": "AP (mm)",
+                "target_pt_S": "DV (mm)",
+            }
+        )
     target_df = target_df.set_index("point")
 else:
     target_df = None
@@ -168,8 +170,7 @@ if targets_by_probe:
     for key, target_name in targets_by_probe.items():
         overshoot_um = (
             target_df.loc[target_name, "distance_past_target"] * 1000
-            if target_df is not None and target_name in target_df.index
-            and "distance_past_target" in target_df.columns
+            if target_df is not None and target_name in target_df.index and "distance_past_target" in target_df.columns
             else 0
         )
         targets_and_overshoots_by_probe[key] = (target_name, overshoot_um)

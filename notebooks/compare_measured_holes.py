@@ -123,9 +123,7 @@ fig
 # `arrow_scale > 1` to exaggerate the sub-mm offsets.
 
 # %%
-fig3d = plot_hole_errors_3d(
-    comparison, arrow_scale=1.0, title=f"{mouse_id}: hole errors (bregma RAS)"
-)
+fig3d = plot_hole_errors_3d(comparison, arrow_scale=1.0, title=f"{mouse_id}: hole errors (bregma RAS)")
 fig3d
 
 # %%

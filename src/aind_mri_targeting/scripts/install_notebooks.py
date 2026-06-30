@@ -1,6 +1,4 @@
-"""
-Command line script to install notebooks
-"""
+"""Command line script to install notebooks."""
 
 import argparse
 
@@ -8,6 +6,7 @@ from .. import util
 
 
 def parse_args():
+    """Parse command line arguments for the install notebooks script."""
     parser = argparse.ArgumentParser(description="Install notebooks into a specified directory")
     parser.add_argument("output", nargs="?", help="path to the output file")
     parser.add_argument(
@@ -21,6 +20,7 @@ def parse_args():
 
 
 def main():
+    """Parse arguments and install notebooks into the specified directory."""
     args = parse_args()
     util.install_notebooks(args.output, force=args.force)
     return 0

@@ -1,12 +1,12 @@
 [build-system]
-requires = ["setuptools", "setuptools-scm"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "aind-mri-targeting"
 description = "Tools to plan and execute MRI-guided targeting experiments"
 license = "MIT"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [
   { name = "Allen Institute for Neural Dynamics" },
   { name = "Galen Lynch", email = "galen@galenlynch.com" },
@@ -17,13 +17,13 @@ readme = "README.md"
 version = "0.1.6"
 
 dependencies = [
-  'aind-anatomical-utils>=0.1,<0.5',
-  'aind_mri_utils>=0.10,<2',
-  'numpy>=1.20,<3',
-  "pandas>=2,<3",
-  'pynrrd>=1,<2',
-  'SimpleITK>=2,<3',
-  'trimesh[recommend]>=4,<5',
+  'aind-anatomical-utils>=0.1',
+  'aind_mri_utils>=0.10',
+  'numpy>=1.20',
+  "pandas>=2",
+  'pynrrd>=1',
+  'SimpleITK>=2',
+  'trimesh[recommend]>=4',
 ]
 
 [project.urls]
@@ -38,49 +38,35 @@ calculate_headframe_transforms = "aind_mri_targeting.scripts.calculate_headframe
 fit_implant = "aind_mri_targeting.scripts.fit_implant:main"
 
 [dependency-groups]
-dev = ['codespell', 'pytest', 'pytest-cov', 'ruff', 'interrogate']
+dev = ["codespell", "pytest", "pytest-cov", "ruff", "interrogate"]
 jupyter = [
-    {include-group = 'dev'},
-    'ipykernel',
-    "ipympl>=0.10.0",
-    "matplotlib>=3.9.4",
-    'pip',
-]
-docs = [
-  {include-group = 'dev'},
-  'mkdocs',
-  'mkdocs-material',
-  'mkdocstrings[python]',
-  'pymdown-extensions',
-  'ruff',
+  { include-group = "dev" },
+  "ipykernel",
+  "ipympl>=0.10.0",
+  "matplotlib>=3.9.4",
+  "pip",
 ]
 
-[tool.setuptools.packages.find]
-where = ["src"]
-
-[tool.setuptools.dynamic]
-readme = { file = "README.md", content-type = "text/markdown" }
+[tool.hatch.build.targets.wheel]
+packages = ["src/aind_mri_targeting"]
 
 [tool.ruff]
 line-length = 120
-target-version = 'py39'
+target-version = "py310"
+extend-exclude = ["scratch"]
 
 [tool.ruff.lint]
-extend-select = ['Q', 'RUF100', 'C90', 'I', 'F', 'E', 'W']
-extend-ignore = []
+extend-select = ["Q", "RUF100", "C90", "I", "F", "E", "W", "D"]
+per-file-ignores = { "tests/*.py" = ["ANN", "D"], "notebooks/*.py" = ["D"] }
 mccabe = { max-complexity = 14 }
-pydocstyle = { convention = 'numpy' }
+pydocstyle = { convention = "numpy" }
 
 [tool.codespell]
-skip = '.git,*.pdf,*.svg,./bonsai,*.bonsai,./docs/_build,uv.lock'
-ignore-words-list = 'nd'
+skip = ".git,*.pdf,*.svg,./docs/build,uv.lock,scratch"
 
 [tool.pytest.ini_options]
 addopts = "--strict-markers --tb=short --cov=src --cov-report=term-missing --cov-fail-under=0"
 testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
 
 [tool.interrogate]
 ignore-init-method = true
@@ -92,14 +78,15 @@ exclude = [
   "tests",
   "docs",
   "build",
-  "setup.py",
   "examples",
   "site",
+  "scratch",
+  ".venv",
 ]
 
 [tool.commitizen]
 version_provider = "pep621"
-version_files = ["pyproject.toml", "src/aind_mri_targeting/__init__.py:__version__"]
 update_changelog_on_bump = true
 tag_format = "v$version"
 major_version_zero = true
+
