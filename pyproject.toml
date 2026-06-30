@@ -18,7 +18,7 @@ version = "0.1.6"
 
 dependencies = [
   'aind-anatomical-utils>=0.1',
-  'aind_mri_utils>=0.10',
+  'aind_mri_utils>=0.13',
   'numpy>=1.20',
   "pandas>=2",
   'pynrrd>=1',
@@ -36,6 +36,12 @@ headframe_centers_of_mass = "aind_mri_targeting.scripts.headframe_centers_of_mas
 install_notebooks = "aind_mri_targeting.scripts.install_notebooks:main"
 calculate_headframe_transforms = "aind_mri_targeting.scripts.calculate_headframe_transforms:main"
 fit_implant = "aind_mri_targeting.scripts.fit_implant:main"
+
+# scikit-image is pulled in transitively by trimesh[recommend]. Without a
+# floor, `uv sync -U` backtracks it to 0.19.3, which fails to build on
+# Python >=3.12 (it imports the removed `distutils`). 0.25+ supports 3.10-3.13.
+[tool.uv]
+constraint-dependencies = ["scikit-image>=0.25"]
 
 [dependency-groups]
 dev = ["codespell", "pytest", "pytest-cov", "ruff", "interrogate"]
