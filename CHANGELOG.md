@@ -1,3 +1,11 @@
+## v0.2.0 (2026-07-01)
+
+### Feat
+
+- **notebooks**: add stereotax-from-arc-angle planning driver
+- add measured-hole QC module and notebooks
+- merge rig notebook improvements into calibration_notebook
+
 ## v0.1.6 (2025-10-20)
 
 ### Fix

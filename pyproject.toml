@@ -14,7 +14,7 @@ authors = [
 ]
 classifiers = ["Programming Language :: Python :: 3"]
 readme = "README.md"
-version = "0.1.6"
+version = "0.2.0"
 
 dependencies = [
   'aind-anatomical-utils>=0.1',
